@@ -9,7 +9,7 @@
 //                  granted by the AppSail project's Authorized Domains (whitelist the exact Pages
 //                  origin, e.g. https://<user>.github.io).
 // Override anytime with ?api=<url>.
-const APPSAIL = "https://jw-schedule-50032944588.development.catalystappsail.in";
+const APPSAIL = "https://jwschedule.development.catalystappsail.in";
 const IS_LOCAL = ["localhost", "127.0.0.1"].includes(location.hostname);
 const DEFAULT_API = IS_LOCAL ? "" : APPSAIL;
 
