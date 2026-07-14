@@ -1,0 +1,99 @@
+/* ============================================================================
+   DESIGN TOKENS  —  one source of truth for colour, type, spacing, motion.
+   Light is default; dark via [data-theme="dark"] and prefers-color-scheme.
+   ========================================================================== */
+:root {
+  /* Font */
+  --font-sans: "Noto Sans", "Noto Sans Tamil", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-tamil: "Noto Sans Tamil", "Noto Sans", system-ui, sans-serif;
+
+  /* Type scale (fluid-ish, rem based) */
+  --fs-xs: 0.75rem;
+  --fs-sm: 0.85rem;
+  --fs-md: 0.95rem;
+  --fs-lg: 1.1rem;
+  --fs-xl: 1.35rem;
+  --fs-2xl: 1.7rem;
+
+  /* Spacing */
+  --sp-1: 4px;  --sp-2: 8px;  --sp-3: 12px; --sp-4: 16px;
+  --sp-5: 20px; --sp-6: 24px; --sp-8: 32px; --sp-10: 40px; --sp-12: 48px;
+
+  /* Radius */
+  --r-sm: 6px; --r-md: 10px; --r-lg: 14px; --r-xl: 20px; --r-full: 999px;
+
+  /* Motion */
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur: 0.18s;
+
+  /* Brand accent */
+  --accent: #4f46e5;
+  --accent-hover: #4338ca;
+  --accent-soft: #eef2ff;
+  --accent-contrast: #ffffff;
+
+  /* Section accents (CLM sheet) */
+  --sec-treasures: #127c71;
+  --sec-apply: #c98a00;
+  --sec-living: #b23b34;
+
+  /* Semantic */
+  --ok: #16a34a; --warn: #d97706; --danger: #dc2626; --danger-soft: #fef2f2;
+
+  /* Neutral surfaces (light) */
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --surface-2: #f9fafb;
+  --surface-3: #f3f4f6;
+  --border: #e5e7eb;
+  --border-strong: #d1d5db;
+  --text: #111827;
+  --text-2: #4b5563;
+  --text-3: #9ca3af;
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.05);
+  --shadow-md: 0 4px 12px rgba(16, 24, 40, 0.08), 0 2px 4px rgba(16, 24, 40, 0.04);
+  --shadow-lg: 0 12px 32px rgba(16, 24, 40, 0.14);
+  --overlay: rgba(17, 24, 39, 0.44);
+}
+
+:root[data-theme="dark"] {
+  --accent: #818cf8;
+  --accent-hover: #a5b4fc;
+  --accent-soft: #1e1b3a;
+  --accent-contrast: #0b1020;
+
+  --sec-treasures: #15a08f;
+  --sec-apply: #e0a516;
+  --sec-living: #d1544c;
+
+  --ok: #4ade80; --warn: #fbbf24; --danger: #f87171; --danger-soft: #2a1414;
+
+  --bg: #0b0f17;
+  --surface: #131926;
+  --surface-2: #171e2d;
+  --surface-3: #1e2636;
+  --border: #263043;
+  --border-strong: #35415a;
+  --text: #eef2f8;
+  --text-2: #aab4c5;
+  --text-3: #6b7688;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 6px 18px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.6);
+  --overlay: rgba(0, 0, 0, 0.6);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --accent: #818cf8; --accent-hover: #a5b4fc; --accent-soft: #1e1b3a; --accent-contrast: #0b1020;
+    --sec-treasures: #15a08f; --sec-apply: #e0a516; --sec-living: #d1544c;
+    --ok: #4ade80; --warn: #fbbf24; --danger: #f87171; --danger-soft: #2a1414;
+    --bg: #0b0f17; --surface: #131926; --surface-2: #171e2d; --surface-3: #1e2636;
+    --border: #263043; --border-strong: #35415a;
+    --text: #eef2f8; --text-2: #aab4c5; --text-3: #6b7688;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,.4);
+    --shadow-md: 0 6px 18px rgba(0,0,0,.45);
+    --shadow-lg: 0 16px 40px rgba(0,0,0,.6);
+    --overlay: rgba(0,0,0,.6);
+  }
+}

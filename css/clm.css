@@ -1,0 +1,45 @@
+/* ============================================================================
+   CLM SHEET  —  the month grid, matched to the printed workbook layout.
+   Shared by the on-screen editor and the exported (PDF) HTML.
+   ========================================================================== */
+.clm-toolbar { display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap; margin-bottom: var(--sp-4); }
+
+.clm-scroll { overflow-x: auto; padding-bottom: var(--sp-3); }
+.clm-sheet { font-family: var(--font-tamil); }
+.clm-title { text-align: center; font-weight: 800; font-size: var(--fs-lg); color: var(--text); }
+.clm-sub { text-align: center; font-weight: 700; font-size: var(--fs-sm); color: var(--text-3); margin: 2px 0 var(--sp-4); }
+
+.clm-grid { display: grid; gap: var(--sp-3); grid-auto-flow: column; grid-auto-columns: minmax(280px, 1fr); }
+.clm-week { border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden; background: var(--surface); display: flex; flex-direction: column; }
+.clm-week-head { background: var(--surface-2); padding: 10px; text-align: center; font-weight: 800; font-size: var(--fs-sm); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: center; gap: 8px; }
+
+.clm-line { display: grid; grid-template-columns: 74px 1fr; gap: 8px; align-items: center; padding: 6px 10px; border-bottom: 1px solid var(--border); font-size: var(--fs-sm); }
+.clm-line .lbl { color: var(--text-3); font-weight: 600; font-size: var(--fs-xs); }
+
+.clm-sec { padding: 7px 10px; color: #fff; font-weight: 800; font-size: var(--fs-xs); display: flex; align-items: center; gap: 8px; letter-spacing: 0.01em; }
+.clm-sec i { font-size: 1rem; }
+.clm-sec.treasures { background: var(--sec-treasures); }
+.clm-sec.apply { background: var(--sec-apply); }
+.clm-sec.living { background: var(--sec-living); }
+
+.clm-part { display: grid; grid-template-columns: 20px 56px 1fr 22px; gap: 8px; align-items: start; padding: 6px 10px; border-bottom: 1px solid var(--border); font-size: var(--fs-sm); }
+.clm-part .no { font-weight: 800; text-align: center; color: var(--text-2); padding-top: 5px; }
+.clm-part .min { color: var(--text-3); font-size: var(--fs-xs); white-space: nowrap; padding-top: 5px; }
+.clm-part .rm { align-self: start; color: var(--text-3); border-radius: 4px; padding: 3px 5px; font-size: 13px; line-height: 1; opacity: 0; transition: opacity var(--dur) var(--ease); }
+.clm-part:hover .rm { opacity: 0.6; }
+.clm-part .rm:hover { opacity: 1; color: var(--danger); background: var(--danger-soft); }
+.clm-part .who { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.clm-week > *:last-child { border-bottom: none; }
+
+/* editable cells */
+.cell {
+  border: 1px dashed transparent; border-radius: var(--r-sm); padding: 4px 6px; min-height: 28px;
+  cursor: pointer; transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
+  font-weight: 600; font-size: var(--fs-sm);
+}
+.cell:hover { background: var(--accent-soft); border-color: var(--accent); }
+.cell.empty { color: var(--text-3); font-weight: 500; font-style: italic; }
+.cell.warn { background: color-mix(in srgb, var(--warn) 14%, transparent); }
+.cell.conflict { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); }
+.cell .part-title { font-weight: 700; }
+.cell .assistant { color: var(--text-2); font-weight: 500; font-size: var(--fs-xs); }
