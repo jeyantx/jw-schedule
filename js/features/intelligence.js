@@ -24,8 +24,10 @@ export function collectAssignments() {
       push(p.assistant, w.date, "clm", "clm.student", p.assignee);
     });
     (secs.living || []).forEach((p) => {
-      push(p.assignee, w.date, "clm", p.reader ? "clm.cbs.conductor" : "clm.living", p.reader);
-      push(p.reader, w.date, "clm", "clm.cbs.reader", p.assignee);
+      const rid = typeof p.reader === "string" ? p.reader : null;
+      const cbs = p.cbs === true || p.reader === true || rid != null;
+      push(p.assignee, w.date, "clm", cbs ? "clm.cbs.conductor" : "clm.living", rid);
+      if (rid) push(rid, w.date, "clm", "clm.cbs.reader", p.assignee);
     });
   }
   // Weekend

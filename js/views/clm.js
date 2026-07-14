@@ -96,7 +96,7 @@ export function renderClm() {
 
   function partRow(w, secKey, idx, part, no, used) {
     const base = `sections.${secKey}.${idx}`;
-    const isCbs = !!part.reader;
+    const isCbs = !!part.cbs || part.reader === true || typeof part.reader === "string";
     const who = el("div", { class: "who" });
     who.append(personCell(w, `${base}.assignee`, part.role || "clm.student", part.gender, used, secKey === "living"));
     if (secKey === "apply") who.append(assistantCell(w, `${base}.assistant`, part.role || "clm.student", part.gender, used));
@@ -225,7 +225,7 @@ function blankWeek(date) {
       ],
       living: [
         { min: 15, role: "clm.living", gender: "brother" },
-        { min: 30, role: "clm.cbs.conductor", gender: "brother", reader: true },
+        { min: 30, role: "clm.cbs.conductor", gender: "brother", cbs: true },
       ],
     },
   };
