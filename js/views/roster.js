@@ -78,7 +78,7 @@ export function makeRoster(kind) {
         else if (f.type === "check") {
           control = el("label", { class: "row", style: { gap: "8px", alignItems: "center" } },
             Object.assign(el("input", { type: "checkbox" }), { checked: !!draft[f.key], onchange: (e) => { draft[f.key] = e.target.checked; } }),
-            el("span", { class: "hint" }, f.label));
+            el("span", { class: "hint" }, getLang() === "ta" ? "உண்டு" : "Yes"));
         }
         else if (f.type === "group") control = el("select", { class: "select", onchange: (e) => { draft[f.key] = e.target.value || null; } },
           el("option", { value: "" }, "—"),

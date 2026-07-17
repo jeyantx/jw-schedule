@@ -21,6 +21,8 @@ export function renderAccess() {
     body.replaceChildren(el("div", { class: "empty" }, icon("alert", 28), el("p", {}, e.message)));
   });
 
+  return container;
+
   function paint(list) {
     const tbody = el("tbody");
     list.sort((a, b) => a.email.localeCompare(b.email)).forEach((a) => {

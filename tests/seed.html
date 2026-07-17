@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>DEV — seed demo session</title></head>
+<body style="font-family:sans-serif">
+<h3>DEV: seed a demo session (offline UI testing)</h3>
+<p>Writes a fake owner session + demo docs to localStorage, then open
+<code>/?api=http://127.0.0.1:9</code> (dead API ⇒ offline mode, cache-backed).</p>
+<pre id="out"></pre>
+<script>
+const email = "dev@test.local", congId = "1";
+const cong = { id: congId, name: "ஊரப்பாக்கம்", code: "DEV123", ownerEmail: email };
+localStorage.setItem("jw_email", email);
+localStorage.setItem("jw_cong", congId);
+localStorage.setItem(`jw:members:${email}`, JSON.stringify([{ congregation: cong, permissions: {} }]));
+
+const P = (id, name, gender, roles) => ({ id, name, gender, roles, active: true });
+const docs = {
+  publishers: [
+    P("p1", "ஜெயந்த்", "brother", ["clm.chairman", "clm.prayer", "clm.treasures", "weekend.chairman", "weekend.wt.conductor", "av.mixer", "fsm.conductor"]),
+    P("p2", "சிவக்குமார்", "brother", ["clm.chairman", "clm.treasures", "clm.cbs.conductor", "weekend.wt.conductor", "weekend.talk"]),
+    P("p3", "உலகநாதன்", "brother", ["clm.treasures", "clm.gems", "weekend.talk", "weekend.wt.reader", "fsm.conductor"]),
+    P("p4", "மேரி", "sister", ["clm.student"]),
+    P("p5", "ரேவதி", "sister", ["clm.student"]),
+    P("p6", "வினு", "brother", ["clm.student", "av.media", "av.mic", "attendant.attendant"]),
+    P("p7", "தாமஸ்", "brother", ["clm.cbs.reader", "av.mic", "attendant.attendant", "cleaning.incharge"]),
+  ],
+  groups: [
+    { id: "g1", name: "மகாலட்சுமி நகர்", overseer: "p1" },
+    { id: "g2", name: "ஆதனூர்", overseer: "p2" },
+  ],
+  clm: [{
+    id: "w1", date: "2026-07-15", chairman: "p1", openingPrayer: "p2", closingPrayer: "p1",
+    sections: {
+      treasures: [{ no: 1, min: 10, assignee: "p2", role: "clm.treasures" }, { no: 2, min: 10, assignee: "p3", role: "clm.gems" }, { no: 3, min: 4, assignee: "p6", role: "clm.student" }],
+      apply: [{ min: 3, assignee: "p4", assistant: "p5", role: "clm.student" }, { min: 4, assignee: "p5", assistant: "p4", role: "clm.student" }, { min: 5, assignee: "p6", role: "clm.student" }],
+      living: [{ min: 15, assignee: "p1", role: "clm.living" }, { min: 30, assignee: "p2", cbs: true, reader: "p7", role: "clm.cbs.conductor" }],
+    },
+  }],
+  weekend: [{ id: "wk1", date: "2026-07-19", chairman: "p1",
+    talk: { number: 12, theme: "கடவுளுடைய புதிய உலகில் வாழ்க்கை", speaker: "p3", speakerCong: "" },
+    wt: { conductor: "p2", reader: "p3" } }],
+  av: [{ id: "a1", date: "2026-07-15", mixer: "p1", media: "p6", micLeft: "p7", micRight: "p6" }],
+  cleaning: [{ id: "c1", weekOf: "2026-07-19", partA: "g1", partB: "g2", incharge: "p7" }],
+  fsm: [{ id: "f1", date: "2026-07-18", time: "காலை 7:30", loc: "ராஜ்ய மண்டபம்", zoom: true, field: "பகுதி 12", conductor: "p1" }],
+  attendant: [{ id: "t1", date: "2026-07-19", hall: "p6", entrance: "p7", video: "" }],
+  meta: { sheet: { theme: "light-1", cleaningFormat: "parts", attendantFormat: "2" } },
+};
+for (const [k, v] of Object.entries(docs)) localStorage.setItem(`jw:${congId}:${k}`, JSON.stringify(v));
+document.getElementById("out").textContent = "Seeded: " + Object.keys(docs).join(", ") + "\nOpen /?api=http://127.0.0.1:9";
+</script>
+</body></html>
