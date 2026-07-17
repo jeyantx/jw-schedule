@@ -193,7 +193,7 @@ export function renderClm() {
   }
 
   async function doExport() {
-    const html = buildClmHtml(weeks, { congName: store.congregation?.name || "", month: S.month, lang, name: pubName });
+    const html = buildClmHtml(weeks, { congName: store.congregation?.name || "", month: S.month, lang, name: pubName, pubs });
     await exportPdf(html, `clm-${monthName(S.month, "en").replace(" ", "-").toLowerCase()}`, { landscape: true });
   }
 }
