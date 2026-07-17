@@ -19,10 +19,19 @@
 // input = {
 //   title:  "ஊரப்பாக்கம் சபையின் - நம் கிறிஸ்தவ ... அட்டவணை",   // line 1 of heading
 //   month:  "ஏப்ரல் 2026",                                      // line 2 of heading
-//   icons:  { treasures, ministry, living },   // optional img srcs (section icons)
+//   header: true,                              // false → no title row (fragment)
+//   footer: true,                              // false → no notes rows (fragment)
+//   icons:  { treasures, ministry, living },   // optional section icons (see images)
+//   theme:  "rgb(244, 241, 220)"               // one day tint for every week, OR
+//           | { tints: [...], sections: { treasures, ministry, living } },
 //   tints:  ["rgb(244, 241, 220)", ...],       // optional per-week day colours
 //   notes:  ["... <span class=\"note-hi\">ஏப்ரல் 1</span> ..."], // 0..3, HTML strings
 //   labels: { chairman, prayer, reading, note },                // optional, Tamil defaults
+//
+// Images (week.image and icons.*) accept any of:
+//   • url / relative path        "resources/pic.jpg", "https://…", "data:image/…"
+//   • bare base64 string         "iVBORw0KGgo…"   (wrapped as data:image/png)
+//   • { data, mime }             { data: "iVBORw…", mime: "image/jpeg" }
 //   weeks: [{                                  // 1..5 weeks
 //     date: "ஏப்ரல் 8, 2026",
 //     image: "resources/xxx.jpg",              // optional weekly picture (89x89)
@@ -49,7 +58,21 @@
 
 export const noteHi = (s) => `<span class="note-hi">${esc(s)}</span>`;
 
+// Single-week fragment: same design, one week's card only, no title/notes.
+export const renderClmWeek = (week, opts = {}) =>
+  renderClmSheet({ ...opts, weeks: [week], header: false, footer: false });
+
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+// Normalise an image input (url / path / bare base64 / {data, mime}) to a src.
+function imgSrc(v) {
+  if (!v) return "";
+  if (typeof v === "object") return `data:${v.mime || "image/png"};base64,${v.data}`;
+  const s = String(v).trim();
+  if (/^(data:|https?:|blob:|file:)/.test(s)) return s;
+  if (s.length > 200 && /^[A-Za-z0-9+/=\s]+$/.test(s)) return `data:image/png;base64,${s.replace(/\s+/g, "")}`;
+  return s; // relative path
+}
 
 // --- geometry taken verbatim from the reference sheet -----------------------
 // Per-week column widths [num, time, mid, name-a, name-b]; edge = gap column.
@@ -69,7 +92,7 @@ const TABLE_SCALE = 2930.80 / 2784.69;
 const H = { title: "69.56", ruleTop: "13.55", photo1: "20.91", photo2: "69.75", ruleMid: "12.55",
             chairman: "42.55", prayer: "29.55", secHdr: "38.66", treasure: "34.55",
             cbs1: "27.55", cbs2: "28.55", reader: "36.55", closing1: "29.55", closing2: "34.55",
-            note1: "16.55", note2: "35.55", note3: "20.70" };
+            noteGap: "14.55", note1: "16.55", note2: "35.55", note3: "20.70" };
 const MINISTRY_UNIT = 51.30;  // ministry band height per item at max density (24×8.55 / 4)
 const LIVING_UNIT   = 49.56;  // living portion row height at max density
 const DAY_TINTS = ["rgb(244, 241, 220)", "rgb(255, 234, 221)", "rgb(231, 231, 231)", "rgb(255, 240, 249)"];
@@ -104,12 +127,11 @@ img{max-width:none;display:inline-block;vertical-align:top}
 /* ===== day colours (background tint) ===== */
 __DAYS__
 /* ===== section accent colours ===== */
-.treasures{--sec:rgb(60, 127, 139)}
-.ministry{--sec:rgb(214, 143, 0)}
-.living{--sec:rgb(191, 47, 19)}
+__SECS__
 
 .section{border: 1.5px solid var(--sec)}
 `;
+const SEC_COLORS = { treasures: "rgb(60, 127, 139)", ministry: "rgb(214, 143, 0)", living: "rgb(191, 47, 19)" };
 
 const SECTIONS = [
   { key: "treasures", title: "பைபிளில் இருக்கும் புதையல்கள்" },
@@ -129,6 +151,11 @@ export function renderClmSheet(input) {
   const icons = input.icons || {};
   const notes = (input.notes || []).slice(0, 3);
   const secTitles = { ...Object.fromEntries(SECTIONS.map((s) => [s.key, s.title])), ...(input.sectionTitles || {}) };
+  const header = input.header !== false;
+  const footer = input.footer !== false;
+  const theme = input.theme || {};
+  const themeTints = typeof theme === "string" ? weeks.map(() => theme) : (theme.tints || input.tints || []);
+  const secColors = { ...SEC_COLORS, ...(typeof theme === "object" ? theme.sections : null) };
 
   // ---- columns / width ----
   const cols = [];
@@ -139,8 +166,9 @@ export function renderClmSheet(input) {
   const iconW = (i) => (WEEK_COLS[i][0] >= 37 ? 37 : 36);
 
   // ---- day tint classes ----
-  const tints = weeks.map((w, i) => w.tint || (input.tints || [])[i] || DAY_TINTS[i % DAY_TINTS.length]);
+  const tints = weeks.map((w, i) => w.tint || themeTints[i] || DAY_TINTS[i % DAY_TINTS.length]);
   const dayCss = tints.map((c, i) => `.day${i + 1}{--day:${c}}`).join("\n");
+  const secCss = SECTIONS.map((s) => `.${s.key}{--sec:${secColors[s.key]}}`).join("\n");
 
   const rows = [];
   const tr = (h, cells) => rows.push(`<tr style="height:${h}px">${cells}</tr>`);
@@ -151,14 +179,15 @@ export function renderClmSheet(input) {
   const minTxt = (m) => (m == null || m === "" ? "" : `${m} min`);
 
   // ---- title ----
-  tr(H.title, `<td class="title" colspan="${totalCols}">${esc(input.title)}<span class="brk"><br class="brk"><br class="brk"></span>${esc(input.month)}</td>`);
+  if (header)
+    tr(H.title, `<td class="title" colspan="${totalCols}">${esc(input.title)}<span class="brk"><br class="brk"><br class="brk"></span>${esc(input.month)}</td>`);
 
   // ---- top rule ----
   weekRow(H.ruleTop, () => `<td class="rule"></td>`.repeat(5), `<td class="spacer"></td>`);
 
   // ---- photo + date (two rows, rowspan 2) ----
   weekRow(H.photo1, (w, i) =>
-    `<td class="photo" colspan="2" rowspan="2">${w.image ? `<div><img src="${esc(w.image)}" alt="" width="89" height="89"></div>` : ""}</td>` +
+    `<td class="photo" colspan="2" rowspan="2">${w.image ? `<div><img src="${esc(imgSrc(w.image))}" alt="" width="89" height="89"></div>` : ""}</td>` +
     `<td class="daydate ${day(i)}" colspan="3" rowspan="2">${esc(w.date)}</td>`);
   tr(H.photo2, weeks.slice(1).map((_, g) => (g === 0 ? `<th class="spacer"></th>` : `<td class="edge"></td>`)).join(""));
 
@@ -173,7 +202,7 @@ export function renderClmSheet(input) {
 
   // ---- section header row ----
   const secHdr = (sec) => weekRow(H.secHdr, (w, i) =>
-    `<td class="sec-icon ${sec}">${icons[sec] ? `<div><img src="${esc(icons[sec])}" alt="" width="${iconW(i)}" height="37"></div>` : ""}</td>` +
+    `<td class="sec-icon ${sec}">${icons[sec] ? `<div><img src="${esc(imgSrc(icons[sec]))}" alt="" width="${iconW(i)}" height="37"></div>` : ""}</td>` +
     `<td class="section ${sec}" colspan="4">${esc(secTitles[sec])}</td>`);
 
   // per-week running part number
@@ -263,17 +292,25 @@ export function renderClmSheet(input) {
   tr(H.closing2, `<td class="edge"></td>`.repeat(N - 1));
 
   // ---- notes ----
-  const sp = (n) => `<td class="spacer"></td>`.repeat(Math.max(0, n));
-  if (notes.length) {
-    const body = notes.map((t, i) => `${i + 1}. ${t}`).join("<br><br>");
-    tr(H.note1, sp(5) + `<td class="note" colspan="11" rowspan="3">${esc(L.note)} <br><br>${body}</td>` + sp(totalCols - 16));
-    tr(H.note2, sp(totalCols - 11));
-    tr(H.note3, sp(totalCols - 11));
-  } else {
-    tr(H.note1, sp(totalCols)); tr(H.note2, sp(totalCols)); tr(H.note3, sp(totalCols));
+  if (footer) {
+    const sp = (n) => `<td class="spacer"></td>`.repeat(Math.max(0, n));
+    tr(H.noteGap, sp(totalCols)); // breathing room between the cards and குறிப்பு
+    if (notes.length) {
+      // note column span: 11 on full sheets (sits under weeks 2-3), narrower sheets use what exists
+      const span = Math.min(11, totalCols - 5);
+      const lead = Math.min(5, totalCols - span);
+      const body = notes.map((t, i) => `${i + 1}. ${t}`).join("<br><br>");
+      // grow the middle row so 2-3 notes never clip (base rows fit one note)
+      const grow = (notes.length - 1) * 44;
+      tr(H.note1, sp(lead) + `<td class="note" colspan="${span}" rowspan="3">${esc(L.note)} <br><br>${body}</td>` + sp(totalCols - lead - span));
+      tr(px(parseFloat(H.note2) + grow), sp(totalCols - span));
+      tr(H.note3, sp(totalCols - span));
+    } else {
+      tr(H.note1, sp(totalCols)); tr(H.note2, sp(totalCols)); tr(H.note3, sp(totalCols));
+    }
   }
 
-  const css = CSS.replace("__WIDTH__", width).replace("__DAYS__", dayCss);
+  const css = CSS.replace("__WIDTH__", width).replace("__DAYS__", dayCss).replace("__SECS__", secCss);
   return `<html><head><meta charset="UTF-8"><title>Schedule</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Tamil:wght@400;700&display=swap" rel="stylesheet">
