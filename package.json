@@ -1,0 +1,9 @@
+{
+  "name": "jw-schedule",
+  "private": true,
+  "type": "module",
+  "description": "Congregation scheduling app — static front-end (GitHub Pages) + Catalyst AppSail backend. No build step; package.json exists only for `npm test`.",
+  "scripts": {
+    "test": "node --test 'tests/**/*.test.mjs'"
+  }
+}

@@ -37,11 +37,13 @@ export function collectAssignments() {
     if (w.wt) { push(w.wt.conductor, w.date, "weekend", "weekend.wt.conductor", w.wt.reader); push(w.wt.reader, w.date, "weekend", "weekend.wt.reader", w.wt.conductor); }
   }
   // AV
-  for (const r of store.get("av")) { push(r.console, r.date, "av", "av.console"); push(r.stage, r.date, "av", "av.stage"); push(r.roving, r.date, "av", "av.roving"); }
+  for (const r of store.get("av")) { push(r.mixer, r.date, "av", "av.mixer"); push(r.media, r.date, "av", "av.media"); push(r.micLeft, r.date, "av", "av.mic"); push(r.micRight, r.date, "av", "av.mic"); }
   // FSM
   for (const r of store.get("fsm")) push(r.conductor, r.date, "fsm", "fsm.conductor");
+  // Cleaning in-charge
+  for (const r of store.get("cleaning")) push(r.incharge, r.weekOf, "cleaning", "cleaning.incharge");
   // Attendant
-  for (const r of store.get("attendant")) (r.attendants || []).forEach((id) => push(id, r.date, "attendant", "attendant.attendant"));
+  for (const r of store.get("attendant")) { push(r.hall, r.date, "attendant", "attendant.attendant"); push(r.entrance, r.date, "attendant", "attendant.attendant"); push(r.video, r.date, "attendant", "attendant.attendant"); }
 
   return out;
 }

@@ -1,98 +1,95 @@
 // ============================================================================
-// ROSTER — a reusable month table + editor that powers the simple schedules
-// (Audio/Video, Cleaning, Field Service, Attendants). Config-driven per kind.
+// ROSTER — month table + editor for the simple schedules (Audio/Video,
+// Cleaning, Field Service, Attendants). Field definitions come from
+// features/boards.js so the editor, the app table and the printed boards
+// always agree (including the congregation's cleaning/attendant format).
 // ============================================================================
 import { store, uid } from "../store.js";
 import { getLang, t } from "../i18n.js";
 import { el, icon, toast, modal, combo, confirmDialog } from "../ui.js";
 import { S, inMonth, monthName, fmtDate } from "../state.js";
-
-const SCHEMA = {
-  av: { title: "av", dateField: "date", cols: [
-    { key: "date", type: "date", en: "Date", ta: "தேதி" },
-    { key: "console", type: "person", role: "av.console", en: "Console", ta: "கன்சோல்" },
-    { key: "stage", type: "person", role: "av.stage", en: "Stage", ta: "மேடை" },
-    { key: "roving", type: "person", role: "av.roving", en: "Roving", ta: "மைக்" },
-  ]},
-  cleaning: { title: "cleaning", dateField: "weekOf", cols: [
-    { key: "weekOf", type: "date", en: "Week of", ta: "வாரம்" },
-    { key: "groupId", type: "group", en: "Group", ta: "குழு" },
-    { key: "area", type: "text", en: "Area", ta: "பகுதி" },
-  ]},
-  fsm: { title: "fsm", dateField: "date", cols: [
-    { key: "date", type: "date", en: "Date", ta: "தேதி" },
-    { key: "time", type: "text", en: "Time", ta: "நேரம்" },
-    { key: "place", type: "text", en: "Place", ta: "இடம்" },
-    { key: "conductor", type: "person", role: "fsm.conductor", en: "Conductor", ta: "நடத்துபவர்" },
-  ]},
-  attendant: { title: "attendant", dateField: "date", cols: [
-    { key: "date", type: "date", en: "Date", ta: "தேதி" },
-    { key: "attendants", type: "people", role: "attendant.attendant", en: "Attendants", ta: "வரவேற்பாளர்கள்" },
-  ]},
-};
+import { kindFields, kindMeta, roleBoardHtml, fsmBoardHtml, weeklyCardHtml, displayName } from "../features/boards.js";
+import { exportPdf } from "../features/pdf.js";
 
 export function makeRoster(kind) {
   return function renderRoster() {
     const lang = getLang();
-    const cfg = SCHEMA[kind];
     const canEdit = store.canEditKind(kind);
     const pubs = store.get("publishers");
     const groups = store.get("groups");
-    const pubName = (id) => pubs.find((p) => p.id === id)?.name || id || "";
-    const groupName = (id) => groups.find((g) => g.id === id)?.name || "";
+    const dateField = kind === "cleaning" ? "weekOf" : "date";
+    const fields = kindFields(kind);
 
-    const rows = store.get(kind).filter((r) => inMonth(r[cfg.dateField])).sort((a, b) => (a[cfg.dateField] || "").localeCompare(b[cfg.dateField] || ""));
+    const rows = store.get(kind).filter((r) => inMonth(r[dateField])).sort((a, b) => (a[dateField] || "").localeCompare(b[dateField] || ""));
 
-    const display = (col, r) => {
-      const v = r[col.key];
-      if (col.type === "date") return fmtDate(v, lang);
-      if (col.type === "person") return v ? el("span", { class: "ta" }, pubName(v)) : el("span", { class: "muted" }, "—");
-      if (col.type === "group") return el("span", { class: "ta" }, groupName(v) || "—");
-      if (col.type === "people") return (v && v.length) ? el("div", { class: "row wrap" }, v.map((id) => el("span", { class: "chip ta" }, pubName(id)))) : el("span", { class: "muted" }, "—");
+    const display = (f, r) => {
+      const v = r[f.key];
+      if (f.type === "person") return v ? el("span", { class: "ta" }, displayName(v, pubs)) : el("span", { class: "muted" }, "—");
+      if (f.type === "group") return el("span", { class: "ta" }, (groups.find((g) => g.id === v) || {}).name || "—");
+      if (f.type === "check") return v ? el("span", { class: "chip accent" }, "Zoom") : el("span", { class: "muted" }, "—");
       return el("span", { class: "ta" }, v || "—");
     };
 
     const tbody = el("tbody");
     rows.forEach((r) => {
       tbody.append(el("tr", { class: canEdit ? "row-click" : "", onClick: canEdit ? () => openEditor(r) : null },
-        ...cfg.cols.map((c) => el("td", {}, display(c, r))),
-        el("td", {}, canEdit ? icon("pencil", 15) : null)));
+        el("td", {}, fmtDate(r[dateField], lang)),
+        ...fields.map((f) => el("td", {}, display(f, r))),
+        el("td", { style: { whiteSpace: "nowrap" } },
+          el("button", { class: "btn btn-icon", title: lang === "ta" ? "வார அட்டை (WhatsApp)" : "Weekly card", onClick: (e) => { e.stopPropagation(); exportWeek(r); } }, icon("share", 14)),
+          canEdit ? icon("pencil", 15) : null)));
     });
 
     const table = rows.length ? el("div", { class: "tbl-wrap" },
       el("table", { class: "tbl" },
-        el("thead", {}, el("tr", {}, ...cfg.cols.map((c) => el("th", {}, c[lang] || c.en)), el("th", {}, ""))),
+        el("thead", {}, el("tr", {}, el("th", {}, t("date")), ...fields.map((f) => el("th", {}, f.label)), el("th", {}, ""))),
         tbody))
       : el("div", { class: "empty" }, icon(kind === "cleaning" ? "broom" : kind === "av" ? "volume" : kind === "fsm" ? "briefcase" : "door", 40),
           el("p", {}, `${monthName(S.month, lang)}`), canEdit ? el("p", { class: "hint" }, `${t("add")} ↑`) : null);
 
     const head = el("div", { class: "view-head spread wrap" },
-      el("div", {}, el("h2", {}, t(cfg.title)), el("p", {}, monthName(S.month, lang))),
-      canEdit ? el("button", { class: "btn btn-primary", onClick: () => openEditor(null) }, icon("plus", 16), t("add")) : null);
+      el("div", {}, el("h2", {}, t(kind)), el("p", {}, monthName(S.month, lang))),
+      el("div", { class: "row wrap" },
+        rows.length ? el("button", { class: "btn", onClick: exportMonth }, icon("download", 16), "PDF") : null,
+        canEdit ? el("button", { class: "btn btn-primary", onClick: () => openEditor(null) }, icon("plus", 16), t("add")) : null));
 
     return el("div", { class: "view" }, head, table);
+
+    /* ---- exports ---- */
+    async function exportMonth() {
+      const opts = { congName: store.congregation?.name || "", month: monthName(S.month, lang) };
+      const html = kind === "fsm" ? fsmBoardHtml(rows, opts) : roleBoardHtml(kind, rows, opts);
+      await exportPdf(html, `${kind}-${monthName(S.month, "en").replace(" ", "-").toLowerCase()}`, { landscape: true });
+    }
+    async function exportWeek(r) {
+      await exportPdf(weeklyCardHtml(kind, r), `${kind}-week-${r[dateField]}`, { landscape: false });
+    }
 
     /* ---- editor modal ---- */
     function openEditor(rec) {
       const isNew = !rec;
       const draft = rec ? JSON.parse(JSON.stringify(rec)) : { id: uid(kind[0]) };
-      const fields = [];
-      cfg.cols.forEach((c) => {
+      const dateI = el("input", { class: "input", type: "date", value: draft[dateField] || monthFirst() });
+      const fieldEls = [el("div", { class: "field" }, el("label", {}, t("date")), dateI)];
+
+      fields.forEach((f) => {
         let control;
-        if (c.type === "date") control = el("input", { class: "input", type: "date", value: draft[c.key] || monthFirst() });
-        else if (c.type === "text") control = el("input", { class: "input", value: draft[c.key] || "" });
-        else if (c.type === "group") control = el("select", { class: "select" }, el("option", { value: "" }, "—"),
-          ...groups.map((g) => el("option", { value: g.id, selected: draft[c.key] === g.id }, g.name)));
-        else if (c.type === "person") control = combo({ options: personOpts(c.role), value: draft[c.key] || null, placeholder: c[lang] || c.en,
-          onSelect: (v) => { draft[c.key] = v; } });
-        else if (c.type === "people") { draft[c.key] = draft[c.key] || []; control = peoplePicker(draft, c); }
-        control.dataset && (control.dataset.k = c.key);
-        fields.push(el("div", { class: "field" }, el("label", {}, c[lang] || c.en), control));
+        if (f.type === "text") { control = el("input", { class: "input ta", value: draft[f.key] || "" }); control.dataset.k = f.key; }
+        else if (f.type === "check") {
+          control = el("label", { class: "row", style: { gap: "8px", alignItems: "center" } },
+            Object.assign(el("input", { type: "checkbox" }), { checked: !!draft[f.key], onchange: (e) => { draft[f.key] = e.target.checked; } }),
+            el("span", { class: "hint" }, f.label));
+        }
+        else if (f.type === "group") control = el("select", { class: "select", onchange: (e) => { draft[f.key] = e.target.value || null; } },
+          el("option", { value: "" }, "—"),
+          ...groups.map((g) => el("option", { value: g.id, selected: draft[f.key] === g.id }, g.name)));
+        else control = combo({ options: personOpts(f.role), value: draft[f.key] || null, placeholder: f.label, onSelect: (v) => { draft[f.key] = v; } });
+        fieldEls.push(el("div", { class: "field" }, el("label", {}, f.label), control));
       });
 
       modal({
         title: isNew ? t("add") : t("edit"),
-        body: el("div", { style: { display: "flex", flexDirection: "column", gap: "14px" } }, fields),
+        body: el("div", { style: { display: "flex", flexDirection: "column", gap: "14px" } }, fieldEls),
         actions: [
           !isNew ? { label: t("delete"), class: "btn-danger", onClick: async (close) => {
             if (!(await confirmDialog(t("confirmDelete")))) return;
@@ -100,9 +97,9 @@ export function makeRoster(kind) {
           } } : null,
           { label: t("cancel"), onClick: (c) => c() },
           { label: t("save"), class: "btn-primary", onClick: (close) => {
-            // pull plain inputs (date/text/group) from DOM
-            fields.forEach((f) => { const inp = f.querySelector("[data-k]"); if (inp && (inp.tagName === "INPUT" || inp.tagName === "SELECT")) draft[inp.dataset.k] = inp.value || (inp.type === "date" ? "" : inp.value); });
-            if (!draft[cfg.dateField]) { toast(t("required"), "danger"); return; }
+            draft[dateField] = dateI.value;
+            fieldEls.forEach((fe) => { const inp = fe.querySelector("[data-k]"); if (inp) draft[inp.dataset.k] = inp.value.trim(); });
+            if (!draft[dateField]) { toast(t("required"), "danger"); return; }
             const arr = store.get(kind).slice();
             const i = arr.findIndex((x) => x.id === draft.id);
             if (i >= 0) arr[i] = draft; else arr.push(draft);
@@ -115,15 +112,6 @@ export function makeRoster(kind) {
     function personOpts(role) {
       return pubs.filter((p) => p.active !== false && (!role || (p.roles || []).includes(role)))
         .sort((a, b) => (a.name || "").localeCompare(b.name || "")).map((p) => ({ value: p.id, label: p.name }));
-    }
-    function peoplePicker(draft, c) {
-      const box = el("div", { class: "row wrap", style: { gap: "6px" } });
-      const paint = () => { box.replaceChildren(); pubs.filter((p) => (p.roles || []).includes(c.role) && p.active !== false).forEach((p) => {
-        const on = draft[c.key].includes(p.id);
-        box.append(el("button", { type: "button", class: `chip ta ${on ? "accent" : ""}`, onClick: () => {
-          const i = draft[c.key].indexOf(p.id); if (i >= 0) draft[c.key].splice(i, 1); else draft[c.key].push(p.id); paint();
-        } }, p.name)); }); };
-      paint(); return box;
     }
   };
 }

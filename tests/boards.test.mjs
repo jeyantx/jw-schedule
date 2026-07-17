@@ -1,0 +1,98 @@
+import "./_env.mjs";
+import { test } from "node:test";
+import assert from "node:assert/strict";
+
+const { store } = await import("../js/store.js");
+const { kindFields, kindMeta, roleBoardHtml, fsmBoardHtml, weekendBoardHtml, weeklyCardHtml, displayName, sheetPrefs, boardTheme } =
+  await import("../js/features/boards.js");
+const { THEMES } = await import("../js/features/boardTemplate.js");
+
+store.docs.publishers = [
+  { id: "p1", name: "ஜெயந்த்", gender: "brother" },
+  { id: "p2", name: "மேரி", gender: "sister" },
+];
+store.docs.groups = [{ id: "g1", name: "மகாலட்சுமி நகர்" }, { id: "g2", name: "ஆதனூர்" }];
+store.docs.meta = {};
+
+test("displayName: gender prefix, free text passthrough, empty", () => {
+  assert.equal(displayName("p1"), "Br. ஜெயந்த்");
+  assert.equal(displayName("p2"), "Sr. மேரி");
+  assert.equal(displayName("Visiting Bro"), "Visiting Bro");
+  assert.equal(displayName(null), "");
+});
+
+test("kindFields: cleaning formats produce the 4 layouts", () => {
+  const keys = (f) => kindFields("cleaning", { cleaningFormat: f }).map((x) => x.key);
+  assert.deepEqual(keys("group"), ["partA"]);
+  assert.deepEqual(keys("group-incharge"), ["partA", "incharge"]);
+  assert.deepEqual(keys("parts"), ["partA", "partB"]);
+  assert.deepEqual(keys("parts-incharge"), ["partA", "partB", "incharge"]);
+});
+
+test("kindFields: custom part labels + attendant 2/3 formats", () => {
+  const f = kindFields("cleaning", { cleaningFormat: "parts", cleaningPartA: "என் பகுதி" });
+  assert.equal(f[0].label, "என் பகுதி");
+  assert.equal(kindFields("attendant", { attendantFormat: "2" }).length, 2);
+  assert.equal(kindFields("attendant", { attendantFormat: "3" }).length, 3);
+});
+
+test("sheetPrefs: defaults + meta.sheet overrides; boardTheme merges custom colours", () => {
+  store.docs.meta = {};
+  assert.equal(sheetPrefs().theme, "light-1");
+  store.docs.meta = { sheet: { theme: "light-2", custom: { accents: { av: "#123456" } } } };
+  assert.equal(sheetPrefs().theme, "light-2");
+  const T = boardTheme();
+  assert.equal(T.accents.av, "#123456");
+  assert.equal(T.accents.cleaning, THEMES["light-2"].accents.cleaning);
+  store.docs.meta = {};
+});
+
+test("roleBoardHtml (av): labels, resolved names, sorted dates", () => {
+  const html = roleBoardHtml("av", [
+    { date: "2026-05-13", mixer: "p1", media: "p2", micLeft: "p1", micRight: "p1" },
+    { date: "2026-05-06", mixer: "p2", media: "p1", micLeft: "p2", micRight: "p1" },
+  ], { congName: "ஊரப்பாக்கம்", month: "மே 2026" });
+  assert.ok(html.includes("ஆடியோ மிக்சர்"));
+  assert.ok(html.includes("Sr. மேரி"));
+  assert.ok(html.indexOf("மே 6") < html.indexOf("மே 13"));
+});
+
+test("roleBoardHtml (cleaning): group names via store; format from meta", () => {
+  store.docs.meta = { sheet: { cleaningFormat: "parts-incharge" } };
+  const html = roleBoardHtml("cleaning", [{ weekOf: "2026-05-10", partA: "g1", partB: "g2", incharge: "p1" }], {});
+  assert.ok(html.includes("மகாலட்சுமி நகர்"));
+  assert.ok(html.includes("ஆதனூர்"));
+  assert.ok(html.includes("Br. ஜெயந்த்"));
+  assert.ok(html.includes("பொறுப்பாளர்"));
+  store.docs.meta = {};
+});
+
+test("fsmBoardHtml: zoom shown as hint under location", () => {
+  const html = fsmBoardHtml([{ date: "2026-05-02", time: "காலை 7:30", loc: "ராஜ்ய மண்டபம்", zoom: true, field: "பகுதி 12", conductor: "p1" }], {});
+  assert.ok(html.includes("+ Zoom"));
+  assert.ok(html.includes("பகுதி 12"));
+});
+
+test("weekendBoardHtml: badge number + speaker congregation hint", () => {
+  const html = weekendBoardHtml([{ date: "2026-05-03", chairman: "p1",
+    talk: { number: 12, theme: "தலைப்பு", speaker: "Br. வெளியூர்", speakerCong: "வேளச்சேரி" }, wt: { conductor: "p1", reader: "p2" } }], {});
+  assert.ok(html.includes('<span class="no">12</span>'));
+  assert.ok(html.includes("வேளச்சேரி"));
+  assert.ok(html.includes("Br. வெளியூர்"));
+});
+
+test("weeklyCardHtml: attendant format respected; empty fields dropped", () => {
+  store.docs.meta = { sheet: { attendantFormat: "3" } };
+  const html = weeklyCardHtml("attendant", { date: "2026-05-06", hall: "p1", entrance: "", video: "p2" });
+  assert.ok(html.includes("Br. ஜெயந்த்"));
+  assert.ok(html.includes("Sr. மேரி"));
+  assert.ok(!html.includes("நுழைவாயில்")); // empty → dropped
+  store.docs.meta = {};
+});
+
+test("kindMeta covers every schedule", () => {
+  for (const k of ["av", "cleaning", "attendant", "fsm", "weekend"]) {
+    assert.ok(kindMeta(k).title, k);
+    assert.ok(kindMeta(k).icon, k);
+  }
+});

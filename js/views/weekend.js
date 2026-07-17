@@ -5,6 +5,8 @@ import { store, uid } from "../store.js";
 import { getLang, t } from "../i18n.js";
 import { el, icon, toast, modal, combo, confirmDialog } from "../ui.js";
 import { S, inMonth, monthName, fmtDate } from "../state.js";
+import { weekendBoardHtml, weeklyCardHtml } from "../features/boards.js";
+import { exportPdf } from "../features/pdf.js";
 
 export function renderWeekend() {
   const lang = getLang();
@@ -23,7 +25,9 @@ export function renderWeekend() {
       el("td", { class: "ta" }, el("div", {}, el("div", {}, speaker || "—"), w.talk?.speakerCong ? el("div", { class: "hint ta" }, w.talk.speakerCong) : null)),
       el("td", { class: "ta" }, w.wt?.conductor ? pubName(w.wt.conductor) : "—"),
       el("td", { class: "ta" }, w.wt?.reader ? pubName(w.wt.reader) : "—"),
-      el("td", {}, canEdit ? icon("pencil", 15) : null)));
+      el("td", { style: { whiteSpace: "nowrap" } },
+        el("button", { class: "btn btn-icon", title: lang === "ta" ? "வார அட்டை (WhatsApp)" : "Weekly card", onClick: (e) => { e.stopPropagation(); exportPdf(weeklyCardHtml("weekend", w), `weekend-week-${w.date}`, { landscape: false }); } }, icon("share", 14)),
+        canEdit ? icon("pencil", 15) : null)));
   });
 
   const table = rows.length ? el("div", { class: "tbl-wrap" },
@@ -35,7 +39,11 @@ export function renderWeekend() {
 
   const head = el("div", { class: "view-head spread wrap" },
     el("div", {}, el("h2", {}, t("weekend")), el("p", {}, monthName(S.month, lang))),
-    canEdit ? el("button", { class: "btn btn-primary", onClick: () => openEditor(null) }, icon("plus", 16), t("add")) : null);
+    el("div", { class: "row wrap" },
+      rows.length ? el("button", { class: "btn", onClick: () => exportPdf(
+        weekendBoardHtml(rows, { congName: store.congregation?.name || "", month: monthName(S.month, lang) }),
+        `weekend-${monthName(S.month, "en").replace(" ", "-").toLowerCase()}`, { landscape: true }) }, icon("download", 16), "PDF") : null,
+      canEdit ? el("button", { class: "btn btn-primary", onClick: () => openEditor(null) }, icon("plus", 16), t("add")) : null));
 
   return el("div", { class: "view" }, head, table);
 

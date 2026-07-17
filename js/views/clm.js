@@ -7,7 +7,7 @@ import { CLM_SECTIONS, ROLES } from "../config.js";
 import { getLang, t } from "../i18n.js";
 import { el, icon, toast, combo, confirmDialog } from "../ui.js";
 import { S, inMonth, monthName, fmtDate } from "../state.js";
-import { buildClmHtml } from "../features/clmSheet.js";
+import { buildClmHtml, buildClmWeekHtml } from "../features/clmSheet.js";
 import { exportPdf } from "../features/pdf.js";
 
 let editing = null; // { weekId, path, type }
@@ -71,8 +71,11 @@ export function renderClm() {
 
     const card = el("div", { class: "clm-week" });
     card.append(el("div", { class: "clm-week-head" }, fmtDate(w.date, lang),
-      canEdit ? el("button", { class: "btn btn-icon btn-ghost btn-sm", title: t("delete"),
-        onClick: async () => { if (await confirmDialog(t("confirmDelete"))) { store.set("clm", store.get("clm").filter((x) => x.id !== w.id)); toast(t("saved"), "ok"); } } }, icon("trash", 15)) : null));
+      el("span", { class: "row", style: { gap: "2px" } },
+        el("button", { class: "btn btn-icon btn-ghost btn-sm", title: lang === "ta" ? "வார அட்டவணை (WhatsApp)" : "Weekly sheet",
+          onClick: () => doExportWeek(w) }, icon("share", 14)),
+        canEdit ? el("button", { class: "btn btn-icon btn-ghost btn-sm", title: t("delete"),
+          onClick: async () => { if (await confirmDialog(t("confirmDelete"))) { store.set("clm", store.get("clm").filter((x) => x.id !== w.id)); toast(t("saved"), "ok"); } } }, icon("trash", 15)) : null)));
 
     card.append(labelLine(t("chairman"), personCell(w, "chairman", "clm.chairman", "brother", used)));
     card.append(labelLine(t("prayer"), personCell(w, "openingPrayer", "clm.prayer", "brother", used)));
@@ -193,8 +196,16 @@ export function renderClm() {
   }
 
   async function doExport() {
-    const html = buildClmHtml(weeks, { congName: store.congregation?.name || "", month: S.month, lang, name: pubName, pubs });
+    const html = buildClmHtml(weeks, { congName: store.congregation?.name || "", month: S.month, lang, name: pubName, pubs, ...clmPrefs() });
     await exportPdf(html, `clm-${monthName(S.month, "en").replace(" ", "-").toLowerCase()}`, { landscape: true });
+  }
+  async function doExportWeek(w) {
+    const html = buildClmWeekHtml(w, { lang, name: pubName, pubs, ...clmPrefs() });
+    await exportPdf(html, `clm-week-${w.date}`, { landscape: false });
+  }
+  function clmPrefs() {
+    const sheet = (store.get("meta") || {}).sheet || {};
+    return { tints: sheet.tints, notes: sheet.clmNotes, icons: sheet.clmIcons };
   }
 }
 

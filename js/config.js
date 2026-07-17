@@ -57,9 +57,10 @@ export const ROLES = [
   { key: "weekend.talk",      area: "weekend", en: "Public Talk Speaker", ta: "பொது பேச்சாளர்" },
   { key: "weekend.wt.conductor", area: "weekend", en: "Watchtower Conductor", ta: "காவற்கோபுர நடத்துபவர்" },
   { key: "weekend.wt.reader", area: "weekend", en: "Watchtower Reader", ta: "காவற்கோபுர வாசிப்பாளர்" },
-  { key: "av.console",        area: "av", en: "Console", ta: "கன்சோல்" },
-  { key: "av.stage",          area: "av", en: "Stage", ta: "மேடை" },
-  { key: "av.roving",         area: "av", en: "Roving Mic", ta: "மைக்" },
+  { key: "av.mixer",          area: "av", en: "Audio Mixer", ta: "ஆடியோ மிக்சர்" },
+  { key: "av.media",          area: "av", en: "Media & Zoom", ta: "மீடியா & Zoom" },
+  { key: "av.mic",            area: "av", en: "Mic", ta: "மைக்" },
+  { key: "cleaning.incharge", area: "cleaning", en: "Cleaning In-charge", ta: "சுத்தம் பொறுப்பாளர்" },
   { key: "fsm.conductor",     area: "fsm", en: "Field Service Conductor", ta: "வெளி ஊழிய நடத்துபவர்" },
   { key: "attendant.attendant", area: "attendant", en: "Attendant", ta: "வரவேற்பாளர்" },
 ];
