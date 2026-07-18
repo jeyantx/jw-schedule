@@ -63,6 +63,7 @@ const PATHS = {
   alert: "M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z",
   clock: "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 6v6l4 2",
   copy: "M9 9h11a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2zM5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1",
+  image: "M3 5h18v14H3zM8.5 11a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3M21 16l-5-5L7 19",
 };
 export function icon(name, size = 20) {
   const p = PATHS[name] || PATHS.grid;
@@ -76,12 +77,35 @@ export function icon(name, size = 20) {
 }
 
 /* ---- Toast -------------------------------------------------------------- */
-export function toast(message, type = "") {
+// Returns a handle: .update(msg,type) swaps content in place (re-arming the
+// auto-dismiss unless {persist:true}); .dismiss() closes now. Pass
+// {persist:true} to keep it visible until the caller updates/dismisses it —
+// used by long backend exports so the spinner doesn't vanish mid-request.
+export function toast(message, type = "", { persist = false } = {}) {
   let host = document.getElementById("toasts");
   if (!host) { host = el("div", { id: "toasts" }); document.body.append(host); }
   const node = el("div", { class: `toast ${type}` }, message);
   host.append(node);
-  setTimeout(() => { node.style.transition = "opacity .3s, transform .3s"; node.style.opacity = "0"; node.style.transform = "translateY(8px)"; setTimeout(() => node.remove(), 300); }, 2600);
+  let timer = null, gone = false;
+  const dismiss = () => {
+    if (gone) return; gone = true; if (timer) clearTimeout(timer);
+    node.style.transition = "opacity .3s, transform .3s"; node.style.opacity = "0"; node.style.transform = "translateY(8px)";
+    setTimeout(() => node.remove(), 300);
+  };
+  const arm = () => { timer = setTimeout(dismiss, 2600); };
+  if (!persist) arm();
+  return {
+    node,
+    update(msg, ty = "", { persist: keep = false } = {}) {
+      if (gone) return this;
+      node.className = `toast ${ty}`;
+      node.replaceChildren(msg && msg.nodeType ? msg : document.createTextNode(String(msg)));
+      if (timer) clearTimeout(timer);
+      if (!keep) arm();
+      return this;
+    },
+    dismiss,
+  };
 }
 
 /* ---- Overlay-based modal / drawer -------------------------------------- */

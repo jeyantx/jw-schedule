@@ -74,6 +74,11 @@ const router = new Router(ROUTES, "dashboard");
 
 /* ---- boot --------------------------------------------------------------- */
 initTheme();
+// Reflect the active UI language on <html lang> so :lang(ta) + the
+// html[lang="ta"] token overrides (slightly smaller scale for Tamil) apply.
+// Language switch calls location.reload(), so setting this once at boot covers
+// both initial load and post-switch.
+document.documentElement.lang = getLang();
 boot();
 
 async function boot() {
@@ -167,7 +172,6 @@ function buildTopbar() {
 
   return el("header", { class: "topbar" },
     hamburger,
-    el("div", { class: "title", id: "viewTitle" }, ""),
     el("div", { class: "grow" }),
     monthNav, sync, congBtn, langBtn, themeBtn, userBtn);
 }
@@ -187,7 +191,6 @@ function toggleSidebar(force) {
 
 function highlightNav(name) {
   els.sidebar.querySelectorAll(".nav-item").forEach((n) => n.classList.toggle("active", n.dataset.route === name));
-  const title = document.getElementById("viewTitle"); if (title) title.textContent = t(name);
   const ml = document.getElementById("monthLabel"); if (ml) ml.textContent = monthName(S.month, getLang());
 }
 
@@ -207,10 +210,18 @@ function renderView(name) {
   const fn = router.view(name);
   try { mount(els.content, fn()); }
   catch (e) { console.error(e); mount(els.content, el("div", { class: "empty" }, icon("alert", 40), el("p", {}, "Something went wrong rendering this view."))); }
-  if (saved) requestAnimationFrame(() => {
-    document.querySelectorAll(SCROLLERS).forEach((n, i) => { if (saved[i]) { n.scrollTop = saved[i][0]; n.scrollLeft = saved[i][1]; } });
-    window.scrollTo(win[0], win[1]);
-  });
+  // Restore scroll SYNCHRONOUSLY in the same task as the mount (before the
+  // browser paints) so there's no visible frame at scrollTop 0 → no jump/shake
+  // on inline edits. The rAF pass is a belt-and-braces second write for any
+  // layout that settles a frame later (e.g. async images).
+  if (saved) {
+    const restore = () => {
+      document.querySelectorAll(SCROLLERS).forEach((n, i) => { if (saved[i]) { n.scrollTop = saved[i][0]; n.scrollLeft = saved[i][1]; } });
+      if (win) window.scrollTo(win[0], win[1]);
+    };
+    restore();
+    requestAnimationFrame(restore);
+  }
   highlightNav(name);
   document.getElementById("monthLabel") && (document.getElementById("monthLabel").textContent = monthName(S.month, getLang()));
 }

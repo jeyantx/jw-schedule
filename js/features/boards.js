@@ -14,16 +14,19 @@
 // }
 // ============================================================================
 import { store } from "../store.js";
-import { getLang } from "../i18n.js";
+import { getContentLang } from "../i18n.js";
 import { fmtDate } from "../state.js";
 import { renderRoleBoard, renderDateBoard, renderBoardCard, resolveTheme } from "./boardTemplate.js";
 
-const lang = () => getLang();
+// Boards are SCHEDULE CONTENT, so they follow the content language (Tamil in
+// "mixed" mode even though the app chrome is English).
+const lang = () => getContentLang();
 const L = (ta, en) => (lang() === "ta" ? ta : en);
 
 export const sheetPrefs = () => ({
   theme: "light-1", cleaningFormat: "parts", attendantFormat: "2",
   midweekDay: 3, weekendDay: 0, fsmDay: 6, // meeting weekdays (0=Sun..6=Sat)
+  weekendExportMonths: 2, // public-talk board span: 1 | 2 | 3 months
   ...((store.get("meta") || {}).sheet || {}),
 });
 export function boardTheme(prefs = sheetPrefs()) {
@@ -35,16 +38,16 @@ export function boardTheme(prefs = sheetPrefs()) {
 // ---- shared helpers ---------------------------------------------------------
 // Raw publisher name (no prefix) in the requested language: English UI prefers
 // nameEn (falls back to name), Tamil UI prefers name (falls back to nameEn).
-export function pubLabel(p, lang = getLang()) {
+export function pubLabel(p, lang = getContentLang()) {
   if (!p) return "";
   return (lang === "en" ? (p.nameEn || p.name) : (p.name || p.nameEn)) || "";
 }
 // Group name in the requested language, same nameEn/name preference.
-export function groupLabel(g, lang = getLang()) {
+export function groupLabel(g, lang = getContentLang()) {
   if (!g) return "";
   return (lang === "en" ? (g.nameEn || g.name) : (g.name || g.nameEn)) || "";
 }
-export function displayName(idOrText, pubs = store.get("publishers"), lang = getLang()) {
+export function displayName(idOrText, pubs = store.get("publishers"), lang = getContentLang()) {
   if (!idOrText) return "";
   const p = pubs.find((x) => x.id === idOrText);
   if (!p) return String(idOrText); // free text (e.g. visiting speaker)
@@ -59,7 +62,10 @@ const fullDate = (iso) => ({ label: fmtDate(iso, lang()), iso });
 const guideline = (prefs, kind) => ((prefs.guidelines || {})[kind] || "").trim() || undefined;
 
 // ---- per-kind field definitions (drive BOTH the view editors and the boards) --
-export function kindFields(kind, prefs = sheetPrefs()) {
+// Labels default to the content language (so tables/boards render Tamil in mixed
+// mode). The editor modal passes the UI language so its field labels stay chrome.
+export function kindFields(kind, prefs = sheetPrefs(), fieldLang = getContentLang()) {
+  const L = (ta, en) => (fieldLang === "ta" ? ta : en);
   switch (kind) {
     case "av": return [
       { key: "mixer", icon: "mixer", label: L("ஆடியோ மிக்சர்", "Audio Mixer"), type: "person", role: "av.mixer" },
@@ -148,7 +154,7 @@ export function fsmBoardHtml(records, { congName, month } = {}) {
       { key: "time", icon: "clock", label: L("நேரம்", "Time"), width: 140 },
       { key: "loc", icon: "pin", label: L("கூட்ட இடம்", "Meeting Location"), align: "left" },
       { key: "field", icon: "home", label: L("வெளி ஊழியப் பகுதி", "Field Territory"), align: "left" },
-      { key: "conductor", icon: "chair", label: L("நடத்துபவர்", "Conductor"), width: 175 },
+      { key: "conductor", icon: "chair", label: L("நடத்துபவர்", "Conductor"), width: 180 },
     ],
     rows: recs.map((r) => ({ date: dateObj(r.date), cells: {
       time: r.time || "", loc: { text: r.loc || "", hint: r.zoom ? "+ Zoom" : "" },
@@ -158,24 +164,31 @@ export function fsmBoardHtml(records, { congName, month } = {}) {
   });
 }
 
-// Weekend → dates left, role columns top. A4 PORTRAIT (per user request): the
-// public-talk column stays flexible + widest; date + the four person columns
-// are fixed and sized so single Tamil words never break mid-word on the narrow
-// page. Compact mode shrinks the font/padding so ~10 rows fit one page.
-export function weekendBoardHtml(records, { congName, month, notes } = {}) {
+// Weekend → dates left, role columns top. A4 LANDSCAPE by default (per user
+// request — use the page width so names rarely wrap): the public-talk column
+// stays flexible + widest; the four person columns are fixed at 154px, whose
+// 134px content fits the widest single-word Tamil name ("Br. ஜெயக்குமார்" =
+// 117px at 13px Noto Sans Tamil, measured) AND the common name+initial pattern
+// ("Br. ஜெயக்குமார் ர." = 133px) on one line. landscape:false keeps the older
+// narrow portrait/compact variant.
+export function weekendBoardHtml(records, { congName, month, notes, landscape = true } = {}) {
   const prefs = sheetPrefs();
   const meta = kindMeta("weekend");
   const recs = [...records].sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+  const personW = landscape ? 154 : 114;
   return renderDateBoard({
     kind: "weekend", theme: boardTheme(prefs), lang: lang(),
     title: meta.title, icon: meta.icon, congName, month,
-    orientation: "portrait", compact: true, dateWidth: 72,
+    orientation: landscape ? "landscape" : "portrait", compact: !landscape,
+    // 126px fits the widest Tamil short date ("செப்டம்பர் 28" = 102px at 14px)
+    // after the 22px .dl indent, so date labels never wrap either
+    dateWidth: landscape ? 126 : 72,
     columns: [
-      { key: "chair", icon: "chair", label: L("சேர்மன்", "Chairman"), width: 92 },
+      { key: "chair", icon: "chair", label: L("சேர்மன்", "Chairman"), width: personW },
       { key: "talk", icon: "talk", label: L("பொது பேச்சு", "Public Talk"), align: "left" },
-      { key: "speaker", icon: "mic", label: L("பேச்சாளர்", "Speaker"), width: 96, align: "left" },
-      { key: "cond", icon: "book", label: L("காவற்கோபுரம்", "Watchtower"), width: 92 },
-      { key: "reader", icon: "reader", label: L("வாசிப்பு", "Reader"), width: 92 },
+      { key: "speaker", icon: "mic", label: L("பேச்சாளர்", "Speaker"), width: personW, align: "left" },
+      { key: "cond", icon: "book", label: L("காவற்கோபுரம்", "Watchtower"), width: personW },
+      { key: "reader", icon: "reader", label: L("வாசிப்பு", "Reader"), width: personW },
     ],
     rows: recs.map((w) => ({ date: dateObj(w.date), cells: {
       chair: displayName(w.chairman),

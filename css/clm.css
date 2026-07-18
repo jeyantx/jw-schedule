@@ -16,11 +16,17 @@
 .clm-line { display: grid; grid-template-columns: 74px 1fr; gap: 8px; align-items: center; padding: 6px 10px; border-bottom: 1px solid var(--border); font-size: var(--fs-sm); }
 .clm-line .lbl { color: var(--text-3); font-weight: 600; font-size: var(--fs-xs); }
 
-.clm-sec { padding: 7px 10px; color: #fff; font-weight: 800; font-size: var(--fs-xs); display: flex; align-items: center; gap: 8px; letter-spacing: 0.01em; }
+/* calm section bands: soft tinted wash + section colour as TEXT + a 3px rule
+   on the left, instead of the old solid saturated fills with white text */
+.clm-sec { padding: 6px 10px; font-weight: 800; font-size: var(--fs-xs); display: flex; align-items: center; gap: 8px; letter-spacing: 0.01em;
+  color: var(--sec); background: color-mix(in srgb, var(--sec) 10%, transparent); border-left: 3px solid var(--sec); }
 .clm-sec i { font-size: 1rem; }
-.clm-sec.treasures { background: var(--sec-treasures); }
-.clm-sec.apply { background: var(--sec-apply); }
-.clm-sec.living { background: var(--sec-living); }
+/* Official WOL section icons (js/features/clmIcons.js): inherit band color, sit on the text baseline. */
+.clm-wol-icon { flex: none; align-self: center; }
+.clm-wol-icon svg { width: 100%; height: 100%; display: block; }
+.clm-sec.treasures { --sec: var(--sec-treasures); }
+.clm-sec.apply { --sec: var(--sec-apply); }
+.clm-sec.living { --sec: var(--sec-living); }
 
 .clm-part { display: grid; grid-template-columns: 20px 56px 1fr 22px; gap: 8px; align-items: start; padding: 6px 10px; border-bottom: 1px solid var(--border); font-size: var(--fs-sm); }
 .clm-part .no { font-weight: 800; text-align: center; color: var(--text-2); padding-top: 5px; }
@@ -51,8 +57,11 @@
 }
 .cell:hover { background: var(--accent-soft); border-color: var(--accent); }
 .cell.empty { color: var(--text-3); font-weight: 500; font-style: italic; }
-.cell.warn { background: color-mix(in srgb, var(--warn) 14%, transparent); }
-.cell.conflict { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); }
+/* qualification warning / double-booking conflict: colour the text + a subtle
+   dotted underline for scannability — no background fill (the pink wash was
+   too loud). This is on-screen UI only; the exported PDF is owned elsewhere. */
+.cell.warn { color: var(--warn); text-decoration: underline dotted; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+.cell.conflict { color: var(--danger); text-decoration: underline dotted; text-decoration-thickness: 1px; text-underline-offset: 3px; }
 .cell .part-title { font-weight: 700; }
 .cell .assistant { color: var(--text-2); font-weight: 500; font-size: var(--fs-xs); }
 

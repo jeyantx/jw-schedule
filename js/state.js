@@ -32,6 +32,16 @@ export function monthDates(weekday, d = S.month) {
 const MONTHS_EN = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const MONTHS_TA = ["ஜனவரி","பிப்ரவரி","மார்ச்","ஏப்ரல்","மே","ஜூன்","ஜூலை","ஆகஸ்ட்","செப்டம்பர்","அக்டோபர்","நவம்பர்","டிசம்பர்"];
 export const monthName = (d, lang) => `${(lang === "ta" ? MONTHS_TA : MONTHS_EN)[d.getMonth()]} ${d.getFullYear()}`;
+// A month or month-range label: single name when from/to share a month
+// ("ஜூலை 2026"), else a range — year shown once when the span stays in one
+// year ("ஜூலை – ஆகஸ்ட் 2026"), or on both ends when it crosses years
+// ("டிசம்பர் 2026 – ஜனவரி 2027").
+export function monthRangeLabel(from, to, lang) {
+  const M = lang === "ta" ? MONTHS_TA : MONTHS_EN;
+  if (from.getFullYear() === to.getFullYear() && from.getMonth() === to.getMonth()) return monthName(from, lang);
+  if (from.getFullYear() === to.getFullYear()) return `${M[from.getMonth()]} – ${M[to.getMonth()]} ${to.getFullYear()}`;
+  return `${monthName(from, lang)} – ${monthName(to, lang)}`;
+}
 export function fmtDate(iso, lang) {
   if (!iso) return "";
   const d = new Date(iso + "T00:00:00");

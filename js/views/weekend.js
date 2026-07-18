@@ -2,17 +2,18 @@
 // WEEKEND — Public Talk (own or visiting speaker) + Watchtower study.
 // ============================================================================
 import { store, uid } from "../store.js";
-import { getLang, t } from "../i18n.js";
+import { getLang, getContentLang, t, tc } from "../i18n.js";
 import { el, icon, toast, modal, combo, confirmDialog } from "../ui.js";
-import { S, inMonth, monthName, fmtDate, monthDates } from "../state.js";
-import { weekendBoardHtml, weeklyCardHtml, kindMeetingDays, pubLabel } from "../features/boards.js";
-import { exportPdf } from "../features/pdf.js";
+import { S, inMonth, monthName, monthRangeLabel, fmtDate, monthDates } from "../state.js";
+import { weekendBoardHtml, weeklyCardHtml, kindMeetingDays, pubLabel, sheetPrefs } from "../features/boards.js";
+import { exportMenu } from "../features/pdf.js";
 
 export function renderWeekend() {
-  const lang = getLang();
+  const lang = getLang();          // app chrome
+  const clang = getContentLang();  // schedule table + exports (Tamil in mixed)
   const canEdit = store.canEditKind("weekend");
   const pubs = store.get("publishers");
-  const pubName = (id) => { const p = pubs.find((x) => x.id === id); return p ? pubLabel(p, lang) : (id || ""); };
+  const pubName = (id) => { const p = pubs.find((x) => x.id === id); return p ? pubLabel(p, clang) : (id || ""); };
 
   const rows = store.get("weekend").filter((w) => inMonth(w.date)).sort((a, b) => (a.date || "").localeCompare(b.date || ""));
   // ghost rows: every weekend date of the month is laid out even when unsaved
@@ -26,36 +27,50 @@ export function renderWeekend() {
   lines.forEach(({ date, rec: w }) => {
     if (!w) {
       tbody.append(el("tr", { class: `ghost ${canEdit ? "row-click" : ""}`, onClick: canEdit ? () => openEditor(null, date) : null },
-        el("td", {}, fmtDate(date, lang)),
+        el("td", {}, fmtDate(date, clang)),
         ...[0, 1, 2, 3].map(() => el("td", { class: "muted" }, "—")),
         el("td", { style: { whiteSpace: "nowrap" } }, canEdit ? icon("plus", 15) : "")));
       return;
     }
     const speaker = w.talk?.speaker ? pubName(w.talk.speaker) : "";
     tbody.append(el("tr", { class: canEdit ? "row-click" : "", onClick: canEdit ? () => openEditor(w) : null },
-      el("td", {}, fmtDate(w.date, lang)),
+      el("td", {}, fmtDate(w.date, clang)),
       el("td", { class: "ta" }, w.talk?.theme || "—"),
       el("td", { class: "ta" }, el("div", {}, el("div", {}, speaker || "—"), w.talk?.speakerCong ? el("div", { class: "hint ta" }, w.talk.speakerCong) : null)),
       el("td", { class: "ta" }, w.wt?.conductor ? pubName(w.wt.conductor) : "—"),
       el("td", { class: "ta" }, w.wt?.reader ? pubName(w.wt.reader) : "—"),
       el("td", { style: { whiteSpace: "nowrap" } },
-        el("button", { class: "btn btn-icon", title: lang === "ta" ? "வார அட்டை (WhatsApp)" : "Weekly card", onClick: (e) => { e.stopPropagation(); exportPdf(weeklyCardHtml("weekend", w), `weekend-week-${w.date}`, { landscape: false }); } }, icon("share", 14)),
+        el("button", { class: "btn btn-icon", title: lang === "ta" ? "வார அட்டை (WhatsApp)" : "Weekly card", onClick: (e) => { e.stopPropagation(); exportMenu({ getHtml: () => weeklyCardHtml("weekend", w), filename: `weekend-week-${w.date}`, landscape: false, title: `${t("weekend")} — ${fmtDate(w.date, lang)}` }); } }, icon("share", 14)),
         canEdit ? icon("pencil", 15) : null)));
   });
 
   const table = lines.length ? el("div", { class: "tbl-wrap" },
     el("table", { class: "tbl" }, el("thead", {}, el("tr", {},
-      el("th", {}, t("date")), el("th", {}, lang === "ta" ? "தலைப்பு" : "Public Talk"),
-      el("th", {}, lang === "ta" ? "பேச்சாளர்" : "Speaker"),
-      el("th", {}, lang === "ta" ? "நடத்துபவர்" : "WT Conductor"), el("th", {}, t("reader")), el("th", {}, ""))), tbody))
+      el("th", {}, tc("date")), el("th", {}, clang === "ta" ? "தலைப்பு" : "Public Talk"),
+      el("th", {}, clang === "ta" ? "பேச்சாளர்" : "Speaker"),
+      el("th", {}, clang === "ta" ? "நடத்துபவர்" : "WT Conductor"), el("th", {}, tc("reader")), el("th", {}, ""))), tbody))
     : el("div", { class: "empty" }, icon("calendar", 40), el("p", {}, monthName(S.month, lang)), canEdit ? el("p", { class: "hint" }, `${t("add")} ↑`) : null);
+
+  // The printed public-talk board spans 1–3 months (per congregation pref),
+  // starting at the current app month. Gather rows across the whole span by
+  // date range (the on-screen table above stays current-month only).
+  const span = sheetPrefs().weekendExportMonths || 2;
+  const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const spanFrom = iso(new Date(S.month.getFullYear(), S.month.getMonth(), 1));
+  const spanTo = iso(new Date(S.month.getFullYear(), S.month.getMonth() + span, 0));
+  const spanRows = store.get("weekend").filter((w) => w.date && w.date >= spanFrom && w.date <= spanTo)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const lastRow = spanRows[spanRows.length - 1];
+  // Printed on the board (schedule content) → content language.
+  const spanLabel = monthRangeLabel(S.month, lastRow ? new Date(lastRow.date + "T00:00:00") : S.month, clang);
 
   const head = el("div", { class: "view-head spread wrap" },
     el("div", {}, el("h2", {}, t("weekend")), el("p", {}, monthName(S.month, lang))),
     el("div", { class: "row wrap" },
-      rows.length ? el("button", { class: "btn", onClick: () => exportPdf(
-        weekendBoardHtml(rows, { congName: store.congregation?.name || "", month: monthName(S.month, lang) }),
-        `weekend-${monthName(S.month, "en").replace(" ", "-").toLowerCase()}`, { landscape: false }) }, icon("download", 16), "PDF") : null,
+      spanRows.length ? el("button", { class: "btn", onClick: () => exportMenu({
+        getHtml: () => weekendBoardHtml(spanRows, { congName: store.congregation?.name || "", month: spanLabel }),
+        filename: `weekend-${monthName(S.month, "en").replace(" ", "-").toLowerCase()}`,
+        landscape: true, title: `${t("weekend")} — ${spanLabel}` }) }, icon("share", 16), lang === "ta" ? "ஏற்றுமதி" : "Export") : null,
       canEdit ? el("button", { class: "btn btn-primary", onClick: () => openEditor(null) }, icon("plus", 16), t("add")) : null));
 
   return el("div", { class: "view" }, head, table);

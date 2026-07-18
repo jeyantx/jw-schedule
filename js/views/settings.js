@@ -3,7 +3,7 @@
 // ============================================================================
 import { store } from "../store.js";
 import { KINDS } from "../config.js";
-import { getLang, setLang, t } from "../i18n.js";
+import { getLang, getStoredLang, setLang, t } from "../i18n.js";
 import { el, icon, toast, confirmDialog } from "../ui.js";
 import { THEMES } from "../features/boardTemplate.js";
 import { sheetPrefs } from "../features/boards.js";
@@ -19,8 +19,17 @@ export function renderSettings() {
     row("Code", el("span", { class: "chip accent" }, c.code || "—")),
     row(t("owner"), el("span", {}, c.ownerEmail || "—")));
 
-  const langBtn = el("button", { class: "btn", onClick: () => { setLang(lang === "ta" ? "en" : "ta"); location.reload(); } },
-    icon("globe", 16), lang === "ta" ? "தமிழ் / English" : "English / தமிழ்");
+  const stored = getStoredLang();
+  const langChoice = (value, label) => el("button", {
+    class: `chip ${stored === value ? "accent" : ""}`, type: "button",
+    style: { display: "inline-flex", gap: "7px", alignItems: "center", padding: "8px 12px" },
+    onClick: () => { if (stored !== value) { setLang(value); location.reload(); } },
+  }, icon("globe", 16), label);
+  const langRow = el("div", { class: "row wrap", style: { gap: "8px" } },
+    langChoice("ta", "தமிழ்"),
+    langChoice("en", "English"),
+    langChoice("mixed", "Mixed — English app · தமிழ் அட்டவணை"));
+
   const themeBtn = el("button", { class: "btn", onClick: () => {
     const cur = document.documentElement.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
     const next = cur === "dark" ? "light" : "dark"; document.documentElement.dataset.theme = next; localStorage.setItem("jw_theme", next);
@@ -28,7 +37,8 @@ export function renderSettings() {
 
   const prefCard = el("div", { class: "card card-pad" },
     el("div", { class: "side-group", style: { padding: "0 0 10px" } }, `${t("language")} · ${t("theme")}`),
-    el("div", { class: "row wrap" }, langBtn, themeBtn));
+    el("div", { class: "field" }, el("label", {}, t("language")), langRow),
+    el("div", { class: "row wrap", style: { marginTop: "10px" } }, themeBtn));
 
   const exportBtn = el("button", { class: "btn", onClick: doExport }, icon("download", 16), "Export backup");
   const importInput = el("input", { type: "file", accept: "application/json", style: { display: "none" }, onchange: doImport });
@@ -85,7 +95,13 @@ export function renderSettings() {
         select(prefs.attendantFormat, [
           ["2", ta ? "மண்டபம் + நுழைவாயில்" : "Hall + entrance"],
           ["3", ta ? "மண்டபம் + நுழைவாயில் + வீடியோ" : "Hall + entrance + video conf"],
-        ], (v) => { savePrefs({ attendantFormat: v }); S.refresh && S.refresh(); }))),
+        ], (v) => { savePrefs({ attendantFormat: v }); S.refresh && S.refresh(); })),
+      el("div", { class: "field grow" }, el("label", {}, ta ? "பொது பேச்சு அட்டவணை" : "Public talk board"),
+        select(String(prefs.weekendExportMonths), [
+          ["1", ta ? "1 மாதம்" : "1 month"],
+          ["2", ta ? "2 மாதங்கள்" : "2 months"],
+          ["3", ta ? "3 மாதங்கள்" : "3 months"],
+        ], (v) => { savePrefs({ weekendExportMonths: Number(v) }); S.refresh && S.refresh(); }))),
     el("div", { class: "row wrap", style: { gap: "14px" } },
       el("div", { class: "field grow" }, el("label", {}, ta ? "சுத்தம் பகுதி A பெயர்" : "Cleaning part A label"),
         textIn(prefs.cleaningPartA, ta ? "பெருக்குதல் & கழிவறை" : "Brooming & Toilet", (v) => savePrefs({ cleaningPartA: v || undefined }))),

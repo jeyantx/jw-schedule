@@ -11,7 +11,7 @@
 // Each apply chip carries a role suffix: .m = student (assignee), .a = assistant.
 // ============================================================================
 import { store } from "../store.js";
-import { getLang, t } from "../i18n.js";
+import { getLang, getContentLang, t } from "../i18n.js";
 import { el, icon } from "../ui.js";
 import { S } from "../state.js";
 import { pubLabel, groupLabel } from "../features/boards.js";
@@ -41,7 +41,8 @@ export function portionMatrix(year, clm = store.get("clm")) {
 }
 
 export function renderPortions() {
-  const lang = getLang();
+  const lang = getLang();          // app chrome
+  const clang = getContentLang();  // publisher / group names (Tamil in mixed)
   const months = lang === "ta" ? MONTHS_TA : MONTHS_EN;
   const L = (ta, en) => (lang === "ta" ? ta : en);
 
@@ -93,12 +94,12 @@ export function renderPortions() {
 
     // group rows by field-service group (grouped view), ungrouped last
     const groups = store.get("groups");
-    const order = [...groups.map((g) => ({ id: g.id, label: groupLabel(g, lang) })), { id: "", label: L("குழு இல்லை", "No group") }];
+    const order = [...groups.map((g) => ({ id: g.id, label: groupLabel(g, clang) })), { id: "", label: L("குழு இல்லை", "No group") }];
     tbody.replaceChildren();
     let shown = 0;
     order.forEach((grp) => {
       const rows = pubs.filter((p) => (p.groupId || "") === grp.id)
-        .sort((a, b) => pubLabel(a, lang).localeCompare(pubLabel(b, lang)));
+        .sort((a, b) => pubLabel(a, clang).localeCompare(pubLabel(b, clang)));
       if (!rows.length) return;
       tbody.append(el("tr", { class: "portions-group" },
         el("td", { class: "sticky-col ta", colSpan: 14 }, grp.label)));
@@ -107,7 +108,7 @@ export function renderPortions() {
         const mine = cells[p.id] || Array.from({ length: 12 }, () => []);
         const total = mine.reduce((n, arr) => n + arr.length, 0);
         tbody.append(el("tr", {},
-          el("td", { class: "sticky-col ta", style: { fontWeight: 600 } }, pubLabel(p, lang)),
+          el("td", { class: "sticky-col ta", style: { fontWeight: 600 } }, pubLabel(p, clang)),
           el("td", { style: { textAlign: "center" } }, total ? el("span", { class: "chip" }, total) : el("span", { class: "muted" }, "—")),
           ...mine.map((chips) => el("td", { style: { textAlign: "center", verticalAlign: "top" } },
             chips.length ? el("div", { class: "pcodes" }, chips.map(codeChip)) : el("span", { class: "muted" }, "")))));

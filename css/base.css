@@ -37,7 +37,7 @@ ul { list-style: none; }
 /* ---- Buttons ------------------------------------------------------------ */
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-2);
-  height: 38px; padding: 0 var(--sp-4);
+  height: 34px; padding: 0 var(--sp-4);
   border-radius: var(--r-md);
   font-size: var(--fs-sm); font-weight: 600;
   border: 1px solid var(--border);
@@ -55,15 +55,15 @@ ul { list-style: none; }
 .btn-danger { background: var(--danger); border-color: var(--danger); color: #fff; }
 .btn-ghost { background: transparent; border-color: transparent; }
 .btn-ghost:hover { background: var(--surface-3); }
-.btn-sm { height: 30px; padding: 0 var(--sp-3); font-size: var(--fs-xs); border-radius: var(--r-sm); }
-.btn-icon { width: 38px; padding: 0; }
-.btn-icon.btn-sm { width: 30px; }
+.btn-sm { height: 28px; padding: 0 var(--sp-3); font-size: var(--fs-xs); border-radius: var(--r-sm); }
+.btn-icon { width: 34px; padding: 0; }
+.btn-icon.btn-sm { width: 28px; }
 
 /* ---- Inputs ------------------------------------------------------------- */
 .field { display: flex; flex-direction: column; gap: var(--sp-2); }
 .field > label { font-size: var(--fs-xs); font-weight: 600; color: var(--text-2); }
 .input, .select, .textarea {
-  width: 100%; height: 40px; padding: 0 var(--sp-3);
+  width: 100%; height: 34px; padding: 0 var(--sp-3);
   border: 1px solid var(--border-strong); border-radius: var(--r-md);
   background: var(--surface); color: var(--text);
   transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
@@ -79,7 +79,7 @@ select.select { appearance: none; background-image: url("data:image/svg+xml,%3Cs
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--r-lg); box-shadow: var(--shadow-sm);
 }
-.card-pad { padding: var(--sp-5); }
+.card-pad { padding: var(--sp-4); }
 
 /* ---- Chips / badges ----------------------------------------------------- */
 .chip {
@@ -112,4 +112,9 @@ select.select { appearance: none; background-image: url("data:image/svg+xml,%3Cs
 .skeleton::after { content: ""; position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--surface) 60%, transparent), transparent); animation: shimmer 1.3s infinite; }
 @keyframes shimmer { 100% { transform: translateX(100%); } }
 @keyframes pop-in { from { opacity: 0; transform: translateY(6px) scale(0.98); } to { opacity: 1; transform: none; } }
+/* .modal is centered with translate(-50%,-50%); a plain pop-in whose `to`
+   is `transform:none` would drop the centering mid-animation and render the
+   modal offset down-right before snapping. This keyframe keeps the centering
+   translate in BOTH frames so the modal only fades + rises in place. */
+@keyframes pop-in-center { from { opacity: 0; transform: translate(-50%, calc(-50% + 10px)) scale(0.98); } to { opacity: 1; transform: translate(-50%, -50%); } }
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }

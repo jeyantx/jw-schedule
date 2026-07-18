@@ -23,6 +23,7 @@ const DICT = {
     history: "Assignment history", partners: "Partners", lastAssigned: "Last assigned", never: "Never",
     saving: "Saving…", saved: "Saved", offline: "Offline", online: "Online",
     addWeek: "Add week", duplicate: "Duplicate last", localNeeds: "Local Needs",
+    autoFill: "Auto-fill (wol)", manual: "Manual", autoFillMonth: "Auto-fill month",
     viewOnly: "View only", grant: "Add member", revoke: "Remove", permissions: "Permissions",
     view: "View", editPerm: "Edit", owner: "Owner", assignNext: "Assign to next open slot",
     confirmDelete: "Delete this? This cannot be undone.", required: "Required",
@@ -48,6 +49,7 @@ const DICT = {
     history: "பணி வரலாறு", partners: "இணைந்தவர்கள்", lastAssigned: "கடைசி நியமனம்", never: "இல்லை",
     saving: "சேமிக்கிறது…", saved: "சேமித்தது", offline: "ஆஃப்லைன்", online: "ஆன்லைன்",
     addWeek: "வாரம் சேர்", duplicate: "நகல் எடு", localNeeds: "சபைத் தேவைகள்",
+    autoFill: "தானியங்கி (wol)", manual: "கைமுறை", autoFillMonth: "மாதம் தானியங்கி",
     viewOnly: "பார்வை மட்டும்", grant: "உறுப்பினர் சேர்", revoke: "நீக்கு", permissions: "அனுமதிகள்",
     view: "பார்வை", editPerm: "திருத்து", owner: "உரிமையாளர்", assignNext: "அடுத்த இடத்தில் நியமி",
     confirmDelete: "நீக்கவா? மீட்டெடுக்க முடியாது.", required: "தேவை",
@@ -55,9 +57,22 @@ const DICT = {
   },
 };
 
+// Stored value is one of "ta" | "en" | "mixed". "mixed" = English app chrome
+// with a Tamil schedule (tables + exports). Backward compatible: "ta"/"en"
+// behave exactly as before.
 let lang = localStorage.getItem("jw_lang") || "ta";
-export const getLang = () => lang;
+// Raw stored preference — used by the Settings UI to highlight the active choice.
+export const getStoredLang = () => lang;
+// UI / chrome language: "mixed" renders the English chrome, so it maps to "en".
+export const getLang = () => (lang === "mixed" ? "en" : lang);
+// Schedule-content language (tables, PDFs, weekly cards): Tamil in "mixed" mode,
+// otherwise identical to the UI language.
+export const getContentLang = () => (lang === "mixed" ? "ta" : getLang());
 export const setLang = (l) => { lang = l; localStorage.setItem("jw_lang", l); };
-export const t = (key) => (DICT[lang] && DICT[lang][key]) || DICT.en[key] || key;
+// Chrome translation — follows the UI language.
+export const t = (key) => (DICT[getLang()] && DICT[getLang()][key]) || DICT.en[key] || key;
+// Content translation — follows the schedule-content language (dictionary labels
+// used inside schedule tables/exports, e.g. column headers).
+export const tc = (key) => (DICT[getContentLang()] && DICT[getContentLang()][key]) || DICT.en[key] || key;
 // Always-English accessor — used by the login / onboarding screens.
 export const en = (key) => DICT.en[key] || key;

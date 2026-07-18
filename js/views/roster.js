@@ -5,20 +5,21 @@
 // always agree (including the congregation's cleaning/attendant format).
 // ============================================================================
 import { store, uid } from "../store.js";
-import { getLang, t } from "../i18n.js";
+import { getLang, getContentLang, t, tc } from "../i18n.js";
 import { el, icon, toast, modal, combo, confirmDialog } from "../ui.js";
 import { S, inMonth, monthName, fmtDate, monthDates } from "../state.js";
 import { kindFields, kindMeetingDays, kindMeta, roleBoardHtml, fsmBoardHtml, weeklyCardHtml, displayName, groupLabel, pubLabel } from "../features/boards.js";
-import { exportPdf } from "../features/pdf.js";
+import { exportMenu } from "../features/pdf.js";
 
 export function makeRoster(kind) {
   return function renderRoster() {
-    const lang = getLang();
+    const lang = getLang();          // app chrome
+    const clang = getContentLang();  // schedule table + exports (Tamil in mixed)
     const canEdit = store.canEditKind(kind);
     const pubs = store.get("publishers");
     const groups = store.get("groups");
     const dateField = kind === "cleaning" ? "weekOf" : "date";
-    const fields = kindFields(kind);
+    const fields = kindFields(kind); // table columns → content language (default)
 
     const rows = store.get(kind).filter((r) => inMonth(r[dateField])).sort((a, b) => (a[dateField] || "").localeCompare(b[dateField] || ""));
     // ghost rows: every meeting date of the month is laid out even when unsaved
@@ -31,8 +32,8 @@ export function makeRoster(kind) {
 
     const display = (f, r) => {
       const v = r[f.key];
-      if (f.type === "person") return v ? el("span", { class: "ta" }, displayName(v, pubs)) : el("span", { class: "muted" }, "—");
-      if (f.type === "group") { const g = groups.find((x) => x.id === v); return el("span", { class: "ta" }, g ? groupLabel(g, lang) : "—"); }
+      if (f.type === "person") return v ? el("span", { class: "ta" }, displayName(v, pubs, clang)) : el("span", { class: "muted" }, "—");
+      if (f.type === "group") { const g = groups.find((x) => x.id === v); return el("span", { class: "ta" }, g ? groupLabel(g, clang) : "—"); }
       if (f.type === "check") return v ? el("span", { class: "chip accent" }, "Zoom") : el("span", { class: "muted" }, "—");
       return el("span", { class: "ta" }, v || "—");
     };
@@ -41,22 +42,22 @@ export function makeRoster(kind) {
     lines.forEach(({ date, rec: r }) => {
       if (!r) {
         tbody.append(el("tr", { class: `ghost ${canEdit ? "row-click" : ""}`, onClick: canEdit ? () => openEditor(null, date) : null },
-          el("td", {}, fmtDate(date, lang)),
+          el("td", {}, fmtDate(date, clang)),
           ...fields.map(() => el("td", { class: "muted" }, "—")),
           el("td", { style: { whiteSpace: "nowrap" } }, canEdit ? icon("plus", 15) : "")));
         return;
       }
       tbody.append(el("tr", { class: canEdit ? "row-click" : "", onClick: canEdit ? () => openEditor(r) : null },
-        el("td", {}, fmtDate(r[dateField], lang)),
+        el("td", {}, fmtDate(r[dateField], clang)),
         ...fields.map((f) => el("td", {}, display(f, r))),
         el("td", { style: { whiteSpace: "nowrap" } },
-          el("button", { class: "btn btn-icon", title: lang === "ta" ? "வார அட்டை (WhatsApp)" : "Weekly card", onClick: (e) => { e.stopPropagation(); exportWeek(r); } }, icon("share", 14)),
+          el("button", { class: "btn btn-icon", title: lang === "ta" ? "வார அட்டை (WhatsApp)" : "Weekly card", onClick: (e) => { e.stopPropagation(); openWeekMenu(r); } }, icon("share", 14)),
           canEdit ? icon("pencil", 15) : null)));
     });
 
     const table = lines.length ? el("div", { class: "tbl-wrap" },
       el("table", { class: "tbl" },
-        el("thead", {}, el("tr", {}, el("th", {}, t("date")), ...fields.map((f) => el("th", {}, f.label)), el("th", {}, ""))),
+        el("thead", {}, el("tr", {}, el("th", {}, tc("date")), ...fields.map((f) => el("th", {}, f.label)), el("th", {}, ""))),
         tbody))
       : el("div", { class: "empty" }, icon(kind === "cleaning" ? "broom" : kind === "av" ? "volume" : kind === "fsm" ? "briefcase" : "door", 40),
           el("p", {}, `${monthName(S.month, lang)}`), canEdit ? el("p", { class: "hint" }, `${t("add")} ↑`) : null);
@@ -64,19 +65,26 @@ export function makeRoster(kind) {
     const head = el("div", { class: "view-head spread wrap" },
       el("div", {}, el("h2", {}, t(kind)), el("p", {}, monthName(S.month, lang))),
       el("div", { class: "row wrap" },
-        rows.length ? el("button", { class: "btn", onClick: exportMonth }, icon("download", 16), "PDF") : null,
+        rows.length ? el("button", { class: "btn", onClick: openMonthMenu }, icon("share", 16), lang === "ta" ? "ஏற்றுமதி" : "Export") : null,
         canEdit ? el("button", { class: "btn btn-primary", onClick: () => openEditor(null) }, icon("plus", 16), t("add")) : null));
 
     return el("div", { class: "view" }, head, table);
 
     /* ---- exports ---- */
-    async function exportMonth() {
-      const opts = { congName: store.congregation?.name || "", month: monthName(S.month, lang) };
-      const html = kind === "fsm" ? fsmBoardHtml(rows, opts) : roleBoardHtml(kind, rows, opts);
-      await exportPdf(html, `${kind}-${monthName(S.month, "en").replace(" ", "-").toLowerCase()}`, { landscape: true });
+    function openMonthMenu() {
+      const opts = { congName: store.congregation?.name || "", month: monthName(S.month, clang) };
+      exportMenu({
+        getHtml: () => (kind === "fsm" ? fsmBoardHtml(rows, opts) : roleBoardHtml(kind, rows, opts)),
+        filename: `${kind}-${monthName(S.month, "en").replace(" ", "-").toLowerCase()}`,
+        landscape: true, title: `${t(kind)} — ${monthName(S.month, lang)}`,
+      });
     }
-    async function exportWeek(r) {
-      await exportPdf(weeklyCardHtml(kind, r), `${kind}-week-${r[dateField]}`, { landscape: false });
+    function openWeekMenu(r) {
+      exportMenu({
+        getHtml: () => weeklyCardHtml(kind, r),
+        filename: `${kind}-week-${r[dateField]}`,
+        landscape: false, title: `${t(kind)} — ${fmtDate(r[dateField], lang)}`,
+      });
     }
 
     /* ---- editor modal ---- */
@@ -86,7 +94,9 @@ export function makeRoster(kind) {
       const dateI = el("input", { class: "input", type: "date", value: draft[dateField] || presetDate || monthFirst() });
       const fieldEls = [el("div", { class: "field" }, el("label", {}, t("date")), dateI)];
 
-      fields.forEach((f) => {
+      // Editor is app chrome → its field labels follow the UI language.
+      const efields = kindFields(kind, undefined, lang);
+      efields.forEach((f) => {
         let control;
         if (f.type === "text") { control = el("input", { class: "input ta", value: draft[f.key] || "" }); control.dataset.k = f.key; }
         else if (f.type === "check") {

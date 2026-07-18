@@ -38,9 +38,9 @@ test("role board: colgroup left column, zebra, hints, dense font step >6 dates",
   assert.ok(html.includes('<colgroup><col style="width:190px">'));
   assert.ok(html.includes('class="r alt"'));
   assert.ok(html.includes('<span class="hint">பயிற்சி</span>'));
-  assert.ok(html.includes("--cfs:14px"));
+  assert.ok(html.includes("--cfs:13px"));
   const many = renderRoleBoard(roleCfg(Array.from({ length: 8 }, (_, i) => ({ label: `d${i}`, iso: `2026-05-${String(6 + i).padStart(2, "0")}` }))));
-  assert.ok(many.includes("--cfs:12.5px"), "dense boards step the font down");
+  assert.ok(many.includes("--cfs:12px"), "dense boards step the font down");
 });
 
 test("role board: standard document (doctype) + accent from theme kind", () => {
@@ -101,14 +101,14 @@ test("icons exist for every field icon used by the boards", () => {
 });
 
 test("print-fit @page: role/fsm landscape, card portrait, weekend portrait+compact", () => {
-  assert.ok(renderRoleBoard(roleCfg()).includes("@page{size:A4 landscape;margin:10mm}"));
+  assert.ok(renderRoleBoard(roleCfg()).includes("@page{size:A4 landscape;margin:6mm}"));
   const card = renderBoardCard({ kind: "av", title: "AV", icon: "speaker", theme: "light-1",
     date: { label: "மே 6", iso: "2026-05-06" }, fields: [{ label: "x", value: "y" }] });
-  assert.ok(card.includes("@page{size:A4 portrait;margin:10mm}"));
+  assert.ok(card.includes("@page{size:A4 portrait;margin:6mm}"));
   const wk = renderDateBoard({ kind: "weekend", title: "W", icon: "tower", theme: "light-1",
     orientation: "portrait", compact: true, columns: [{ key: "a", label: "A" }],
     rows: [{ date: { label: "மே 3", iso: "2026-05-03" }, cells: { a: "x" } }] });
-  assert.ok(wk.includes("@page{size:A4 portrait;margin:10mm}"));
+  assert.ok(wk.includes("@page{size:A4 portrait;margin:6mm}"));
   assert.ok(wk.includes('class="board compact"'));
 });
 

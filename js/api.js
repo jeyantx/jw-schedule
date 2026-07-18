@@ -68,4 +68,13 @@ export const api = {
     const res = await request("POST", "/pdf", body, { raw: true, timeout: 90000 });
     return res.blob();
   },
+  // Image (PNG): returns a Blob. width is the viewport px (default 1120, backend clamps
+  // 320..2400); fullPage (default true) captures the board's full scroll height.
+  image: async (html, { width, fullPage, filename = "schedule" } = {}) => {
+    const body = { html, filename };
+    if (width != null) body.width = width;
+    if (fullPage != null) body.fullPage = fullPage;
+    const res = await request("POST", "/image", body, { raw: true, timeout: 90000 });
+    return res.blob();
+  },
 };
