@@ -5,14 +5,18 @@
 import { store, uid } from "../store.js";
 import { CLM_SECTIONS, ROLES } from "../config.js";
 import { getLang, t } from "../i18n.js";
-import { el, icon, toast, combo, confirmDialog } from "../ui.js";
+import { el, icon, toast, combo, confirmDialog, drawer } from "../ui.js";
 import { S, inMonth, monthName, fmtDate, monthDates } from "../state.js";
-import { kindMeetingDays } from "../features/boards.js";
+import { kindMeetingDays, pubLabel } from "../features/boards.js";
+import { missingSince, recentRepeats, statsFor, collectAssignments } from "../features/intelligence.js";
+import { fetchWeekImages, matchWeekImage } from "../features/wol.js";
 import { buildClmHtml, buildClmWeekHtml } from "../features/clmSheet.js";
 import { exportPdf } from "../features/pdf.js";
 import { assetDataUri } from "../features/assets.js";
 
 let editing = null; // { weekId, path, type }
+// Ministry-portion type codes (apply section) — feed the Student Portions matrix.
+export const PORTION_TYPES = ["SC", "FU", "MD", "EB", "T"];
 
 const getPath = (obj, path) => path.split(".").reduce((o, k) => (o == null ? o : o[k]), obj);
 function setPath(obj, path, val) {
@@ -26,13 +30,30 @@ export function renderClm() {
   const canEdit = store.canEditKind("clm");
   const weeks = store.get("clm").filter((w) => inMonth(w.date)).sort((a, b) => (a.date || "").localeCompare(b.date || ""));
   const pubs = store.get("publishers");
-  const pubName = (id) => pubs.find((p) => p.id === id)?.name || id || "";
+  const pubName = (id) => { const p = pubs.find((x) => x.id === id); return p ? pubLabel(p, lang) : (id || ""); };
 
   const commit = (next) => {
     const all = store.get("clm").slice();
     const i = all.findIndex((w) => w.id === next.id);
     if (i >= 0) all[i] = next; else all.push(next);
     store.set("clm", all);
+  };
+
+  // Intelligence computed ONCE per render (not per cell): last-assigned date +
+  // count-this-year per publisher, used to rank + annotate the combo options.
+  const memoAll = collectAssignments();
+  const thisYear = String(S.month.getFullYear());
+  const lastOverall = {}, countYear = {};
+  for (const a of memoAll) {
+    if (a.date && (!lastOverall[a.pubId] || a.date > lastOverall[a.pubId])) lastOverall[a.pubId] = a.date;
+    if ((a.date || "").startsWith(thisYear)) countYear[a.pubId] = (countYear[a.pubId] || 0) + 1;
+  }
+  const shortIso = (iso) => fmtDate(iso, lang).replace(/,\s*\d{4}$/, "");
+  const metaFor = (p) => {
+    const parts = [];
+    if (lastOverall[p.id]) parts.push(shortIso(lastOverall[p.id]));
+    if (countYear[p.id]) parts.push(String(countYear[p.id]));
+    return parts.join(" · ");
   };
 
   /* -- toolbar -- */
@@ -43,11 +64,15 @@ export function renderClm() {
     commit(blankWeek(d)); toast(t("saved"), "ok");
   } }, icon("plus", 16), t("addWeek"));
   const dupBtn = el("button", { class: "btn", onClick: duplicateLast }, icon("copy", 16), t("duplicate"));
+  const helperBtn = el("button", { class: "btn", onClick: openHelper }, icon("userCheck", 16), t("helper"));
+  const imgBtn = el("button", { class: "btn", onClick: loadImages }, icon("calendar", 16), t("images"));
   const pdfBtn = el("button", { class: "btn", onClick: doExport }, icon("download", 16), t("exportPdf"));
 
   const toolbar = el("div", { class: "clm-toolbar" },
     canEdit ? el("div", { class: "row" }, datePick, addBtn) : null,
     canEdit && weeks.length ? dupBtn : null,
+    canEdit ? helperBtn : null,
+    canEdit && weeks.length ? imgBtn : null,
     el("div", { class: "grow" }),
     weeks.length ? pdfBtn : null);
 
@@ -80,7 +105,9 @@ export function renderClm() {
     conflictIds(w).forEach((id) => { if (id) used[id] = (used[id] || 0) + 1; });
 
     const card = el("div", { class: "clm-week" });
-    card.append(el("div", { class: "clm-week-head" }, fmtDate(w.date, lang),
+    card.append(el("div", { class: "clm-week-head" },
+      w.image ? el("img", { class: "wk-thumb", src: w.image, alt: "", loading: "lazy" }) : null,
+      fmtDate(w.date, lang),
       el("span", { class: "row", style: { gap: "2px" } },
         el("button", { class: "btn btn-icon btn-ghost btn-sm", title: lang === "ta" ? "வார அட்டவணை (WhatsApp)" : "Weekly sheet",
           onClick: () => doExportWeek(w) }, icon("share", 14)),
@@ -130,7 +157,16 @@ export function renderClm() {
         ? minInput(w, `${base}.min`)
         : (part.min ? `${part.min} ${lang === "ta" ? "நிமி" : "min"}` : "—"));
 
-    const row = el("div", { class: "clm-part" }, el("span", { class: "no" }, no), minCell, who);
+    // Apply-section portion type (SC/FU/MD/EB/T) — feeds the portions matrix.
+    const typeSel = (canEdit && secKey === "apply")
+      ? el("select", { class: "type-chip", title: lang === "ta" ? "பகுதி வகை" : "Portion type",
+          onChange: (e) => { const next = clone(w); setPath(next, `${base}.type`, e.target.value || null); editing = null; commit(next); } },
+          el("option", { value: "" }, "—"),
+          ...PORTION_TYPES.map((c) => el("option", { value: c, selected: part.type === c }, c)))
+      : (secKey === "apply" && part.type ? el("span", { class: "type-chip static" }, part.type) : null);
+    const col2 = el("div", { class: "min-col" }, minCell, typeSel);
+
+    const row = el("div", { class: "clm-part" }, el("span", { class: "no" }, no), col2, who);
     if (canEdit) row.append(el("button", { class: "rm", title: t("delete"), onClick: () => p_remove(w, secKey, idx) }, "✕"));
     return row;
   }
@@ -188,10 +224,18 @@ export function renderClm() {
   function startEdit(w, path, type) { editing = { weekId: w.id, path, type }; S.refresh(); }
 
   function optionsFor(role, gender) {
-    return pubs
-      .filter((p) => p.active !== false && (!role || (p.roles || []).includes(role)) && (!gender || p.gender === gender))
-      .sort((a, b) => (a.name || "").localeCompare(b.name || ""))
-      .map((p) => ({ value: p.id, label: p.name, meta: "" }));
+    // role-specific last-assigned, for least-recently-used ranking
+    const roleLast = {};
+    for (const a of memoAll) if (a.role === role && a.date && (!roleLast[a.pubId] || a.date > roleLast[a.pubId])) roleLast[a.pubId] = a.date;
+    const eligible = pubs.filter((p) => p.active !== false && (!role || (p.roles || []).includes(role)) && (!gender || p.gender === gender));
+    const active = eligible.filter((p) => !p.exempt)
+      .sort((a, b) => (roleLast[a.id] || "").localeCompare(roleLast[b.id] || "") || pubLabel(a, lang).localeCompare(pubLabel(b, lang)))
+      .map((p) => ({ value: p.id, label: pubLabel(p, lang), meta: metaFor(p) }));
+    // exempt publishers stay pickable, but sink to the bottom flagged as such
+    const exempt = eligible.filter((p) => p.exempt)
+      .sort((a, b) => pubLabel(a, lang).localeCompare(pubLabel(b, lang)))
+      .map((p) => ({ value: p.id, label: pubLabel(p, lang), meta: t("exempt") }));
+    return [...active, ...exempt];
   }
 
   /* ---------- part add/remove ---------- */
@@ -239,6 +283,64 @@ export function renderClm() {
       assetDataUri("assets/clm/living.jpg"),
     ]);
     return { treasures, ministry, living };
+  }
+
+  /* ---------- assignment helper drawer ---------- */
+  function openHelper() {
+    const nm = (id) => pubName(id) || id || "—";
+    const L = (ta, en) => (lang === "ta" ? ta : en);
+    const rowLine = (main, meta) => el("div", { class: "spread", style: { padding: "7px 0", borderBottom: "1px solid var(--border)" } },
+      el("span", { class: "ta" }, main), el("span", { class: "hint" }, meta || ""));
+    const section = (title, nodes) => el("div", { style: { marginTop: "18px" } },
+      el("div", { class: "side-group", style: { padding: "0 0 6px" } }, title), ...nodes);
+
+    // a) Missing longest — top 10 active, non-exempt, sorted by days-since-last
+    const missing = missingSince(null, memoAll).slice(0, 10).map((m) =>
+      rowLine(nm(m.p.id), m.days == null ? t("never") : L(`${m.days} நாட்கள்`, `${m.days} days`)
+        + (m.last ? ` · ${shortIso(m.last)}` : "")));
+    // b) Frequent recently — recentRepeats(8)
+    const frequent = recentRepeats(8, memoAll).map((r) => rowLine(nm(r.p.id), `×${r.count}`));
+    // c) Pair history — pick a person, show their partners
+    const pairBox = el("div", { style: { marginTop: "6px" } });
+    const pairCombo = combo({
+      options: pubs.filter((p) => p.active !== false).sort((a, b) => pubLabel(a, lang).localeCompare(pubLabel(b, lang)))
+        .map((p) => ({ value: p.id, label: pubLabel(p, lang) })),
+      placeholder: L("நபரைத் தேர்வுசெய்", "Choose a person"),
+      onSelect: (v) => {
+        pairBox.replaceChildren();
+        if (!v) return;
+        const s = statsFor(v, memoAll);
+        if (!s.partners.length) { pairBox.append(el("p", { class: "muted" }, "—")); return; }
+        s.partners.forEach(([id, n]) => {
+          const last = s.history.find((h) => h.partnerId === id);
+          pairBox.append(rowLine(nm(id), `×${n}${last ? " · " + shortIso(last.date) : ""}`));
+        });
+      },
+    });
+
+    drawer({ title: t("helper"), body: el("div", {},
+      section(L("நீண்ட நாட்களாக இல்லாதவர்கள்", "Missing longest"), missing.length ? missing : [el("p", { class: "muted" }, "—")]),
+      section(L("அடிக்கடி வருபவர்கள்", "Frequent recently"), frequent.length ? frequent : [el("p", { class: "muted" }, "—")]),
+      section(L("ஜோடி வரலாறு", "Pair history"), [pairCombo, pairBox])) });
+  }
+
+  /* ---------- wol weekly thumbnails ---------- */
+  async function loadImages() {
+    try {
+      toast(lang === "ta" ? "படங்கள் ஏற்றப்படுகிறது…" : "Loading images…");
+      const wolWeeks = await fetchWeekImages(S.month, "en");
+      let count = 0;
+      // re-read saved weeks fresh each commit (commit mutates the store doc)
+      for (const w of store.get("clm").filter((x) => inMonth(x.date))) {
+        const img = matchWeekImage(wolWeeks, w.date);
+        if (img) { const next = clone(w); next.image = img; commit(next); count++; }
+      }
+      toast(count
+        ? (lang === "ta" ? `${count} படங்கள் சேர்க்கப்பட்டன` : `${count} images added`)
+        : (lang === "ta" ? "பொருந்தும் படங்கள் இல்லை" : "No matching images"), count ? "ok" : "danger");
+    } catch (e) {
+      toast((lang === "ta" ? "படங்கள் ஏற்ற முடியவில்லை: " : "Could not load images: ") + (e.message || ""), "danger");
+    }
   }
 }
 

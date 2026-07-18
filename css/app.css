@@ -87,6 +87,26 @@ table.tbl tbody tr:hover { background: var(--surface-2); }
 table.tbl tbody tr.ghost td { color: var(--text-3); }
 table.tbl tbody tr.ghost td:first-child { font-style: italic; }
 
+/* ---- Student-portions matrix ------------------------------------------- */
+.portions-tbl td, .portions-tbl th { padding: 7px 8px; }
+.portions-tbl .sticky-col { position: sticky; left: 0; z-index: 2; background: var(--surface); }
+.portions-tbl thead .sticky-col { z-index: 3; background: var(--surface-2); }
+.portions-tbl tbody tr:hover .sticky-col { background: var(--surface-2); }
+.portions-tbl tr.portions-group td { background: var(--surface-3); font-weight: 800; font-size: var(--fs-xs);
+  text-transform: uppercase; letter-spacing: 0.03em; color: var(--text-2); }
+.portions-tbl tr.portions-group .sticky-col { background: var(--surface-3); }
+.pcodes { display: flex; flex-wrap: wrap; gap: 3px; justify-content: center; }
+.pcode { display: inline-flex; align-items: baseline; height: 18px; padding: 0 5px; border-radius: var(--r-sm);
+  font-size: 0.66rem; font-weight: 800; letter-spacing: 0.02em; }
+.pcode sub { font-size: 0.55rem; font-weight: 700; opacity: 0.75; }
+.pcode-BR { background: color-mix(in srgb, #3b82f6 22%, transparent); color: color-mix(in srgb, #3b82f6 85%, var(--text)); }
+.pcode-T  { background: color-mix(in srgb, #ef4444 22%, transparent); color: color-mix(in srgb, #ef4444 85%, var(--text)); }
+.pcode-SC { background: color-mix(in srgb, #f59e0b 24%, transparent); color: color-mix(in srgb, #f59e0b 88%, var(--text)); }
+.pcode-FU { background: color-mix(in srgb, #22c55e 22%, transparent); color: color-mix(in srgb, #22c55e 85%, var(--text)); }
+.pcode-MD { background: color-mix(in srgb, #a855f7 24%, transparent); color: color-mix(in srgb, #a855f7 88%, var(--text)); }
+.pcode-EB { background: color-mix(in srgb, #eab308 26%, transparent); color: color-mix(in srgb, #eab308 88%, var(--text)); }
+.pcode-S  { background: var(--surface-3); color: var(--text-2); }
+
 /* ---- Modal + Drawer ----------------------------------------------------- */
 .overlay { position: fixed; inset: 0; background: var(--overlay); z-index: 50; animation: fade-in var(--dur) var(--ease); backdrop-filter: blur(2px); }
 .modal { position: fixed; z-index: 60; left: 50%; top: 50%; transform: translate(-50%, -50%);

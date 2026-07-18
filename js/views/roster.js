@@ -8,7 +8,7 @@ import { store, uid } from "../store.js";
 import { getLang, t } from "../i18n.js";
 import { el, icon, toast, modal, combo, confirmDialog } from "../ui.js";
 import { S, inMonth, monthName, fmtDate, monthDates } from "../state.js";
-import { kindFields, kindMeetingDays, kindMeta, roleBoardHtml, fsmBoardHtml, weeklyCardHtml, displayName } from "../features/boards.js";
+import { kindFields, kindMeetingDays, kindMeta, roleBoardHtml, fsmBoardHtml, weeklyCardHtml, displayName, groupLabel, pubLabel } from "../features/boards.js";
 import { exportPdf } from "../features/pdf.js";
 
 export function makeRoster(kind) {
@@ -32,7 +32,7 @@ export function makeRoster(kind) {
     const display = (f, r) => {
       const v = r[f.key];
       if (f.type === "person") return v ? el("span", { class: "ta" }, displayName(v, pubs)) : el("span", { class: "muted" }, "—");
-      if (f.type === "group") return el("span", { class: "ta" }, (groups.find((g) => g.id === v) || {}).name || "—");
+      if (f.type === "group") { const g = groups.find((x) => x.id === v); return el("span", { class: "ta" }, g ? groupLabel(g, lang) : "—"); }
       if (f.type === "check") return v ? el("span", { class: "chip accent" }, "Zoom") : el("span", { class: "muted" }, "—");
       return el("span", { class: "ta" }, v || "—");
     };
@@ -96,7 +96,7 @@ export function makeRoster(kind) {
         }
         else if (f.type === "group") control = el("select", { class: "select", onchange: (e) => { draft[f.key] = e.target.value || null; } },
           el("option", { value: "" }, "—"),
-          ...groups.map((g) => el("option", { value: g.id, selected: draft[f.key] === g.id }, g.name)));
+          ...groups.map((g) => el("option", { value: g.id, selected: draft[f.key] === g.id }, groupLabel(g, lang))));
         else control = combo({ options: personOpts(f.role), value: draft[f.key] || null, placeholder: f.label, onSelect: (v) => { draft[f.key] = v; } });
         fieldEls.push(el("div", { class: "field" }, el("label", {}, f.label), control));
       });
@@ -125,7 +125,7 @@ export function makeRoster(kind) {
 
     function personOpts(role) {
       return pubs.filter((p) => p.active !== false && (!role || (p.roles || []).includes(role)))
-        .sort((a, b) => (a.name || "").localeCompare(b.name || "")).map((p) => ({ value: p.id, label: p.name }));
+        .sort((a, b) => pubLabel(a, lang).localeCompare(pubLabel(b, lang))).map((p) => ({ value: p.id, label: pubLabel(p, lang) }));
     }
   };
 }

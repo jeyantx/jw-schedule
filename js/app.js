@@ -16,6 +16,7 @@ import { renderAccess } from "./views/access.js";
 import { renderSettings } from "./views/settings.js";
 import { makeRoster } from "./views/roster.js";
 import { renderWeekend } from "./views/weekend.js";
+import { renderPortions } from "./views/portions.js";
 
 const root = document.getElementById("app");
 
@@ -46,6 +47,7 @@ const NAV = [
   { group: "people", items: [
     { name: "publishers", icon: "users", kind: "publishers" },
     { name: "groups", icon: "grid", kind: "groups" },
+    { name: "portions", icon: "grid", kind: null },
   ]},
   { group: "admin", items: [
     { name: "access", icon: "shield", kind: null, ownerOnly: true },
@@ -64,6 +66,7 @@ const ROUTES = {
   attendant: makeRoster("attendant"),
   publishers: renderPublishers,
   groups: renderGroups,
+  portions: renderPortions,
   access: renderAccess,
   settings: renderSettings,
 };

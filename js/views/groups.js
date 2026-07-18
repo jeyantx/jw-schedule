@@ -4,18 +4,20 @@
 import { store, uid } from "../store.js";
 import { getLang, t } from "../i18n.js";
 import { el, icon, toast, modal, combo, confirmDialog } from "../ui.js";
+import { pubLabel, groupLabel } from "../features/boards.js";
 
 export function renderGroups() {
+  const lang = getLang();
   const canEdit = store.canEditKind("groups");
   const pubs = store.get("publishers");
-  const pubName = (id) => pubs.find((p) => p.id === id)?.name || "—";
+  const pubName = (id) => { const p = pubs.find((x) => x.id === id); return p ? pubLabel(p, lang) : "—"; };
   const groups = store.get("groups");
   const memberCount = (gid) => pubs.filter((p) => p.groupId === gid).length;
 
   const cards = el("div", { class: "grid-cards" });
   groups.forEach((g) => {
     cards.append(el("div", { class: "card card-pad", style: { cursor: canEdit ? "pointer" : "default" }, onClick: canEdit ? () => openEditor(g) : null },
-      el("div", { class: "spread" }, el("div", { class: "ta", style: { fontWeight: 800, fontSize: "var(--fs-lg)" } }, g.name),
+      el("div", { class: "spread" }, el("div", { class: "ta", style: { fontWeight: 800, fontSize: "var(--fs-lg)" } }, groupLabel(g, lang)),
         el("span", { class: "chip" }, `${memberCount(g.id)}`)),
       el("div", { style: { marginTop: "10px" } },
         el("div", { class: "hint" }, t("owner")), el("div", { class: "ta", style: { fontWeight: 600 } }, pubName(g.overseerId)),
@@ -31,19 +33,20 @@ export function renderGroups() {
 
   function openEditor(g) {
     const isNew = !g;
-    const d = g ? { ...g } : { id: uid("g"), name: "", overseerId: "", assistantId: "" };
+    const d = g ? { ...g } : { id: uid("g"), name: "", nameEn: "", overseerId: "", assistantId: "" };
     const nameI = el("input", { class: "input ta", value: d.name, placeholder: t("name") });
-    const opts = pubs.filter((p) => p.gender !== "sister" && p.active !== false).map((p) => ({ value: p.id, label: p.name }));
+    const nameEnI = el("input", { class: "input", value: d.nameEn || "", placeholder: t("nameEn") });
+    const opts = pubs.filter((p) => p.gender !== "sister" && p.active !== false).map((p) => ({ value: p.id, label: pubLabel(p, lang) }));
     const ovC = combo({ options: opts, value: d.overseerId || null, placeholder: t("owner"), onSelect: (v) => (d.overseerId = v) });
     const asC = combo({ options: opts, value: d.assistantId || null, placeholder: t("assistant"), onSelect: (v) => (d.assistantId = v) });
     const F = (l, n) => el("div", { class: "field" }, el("label", {}, l), n);
     modal({
       title: isNew ? t("add") : t("edit"),
-      body: el("div", { style: { display: "flex", flexDirection: "column", gap: "14px" } }, F(t("name"), nameI), F(t("owner"), ovC), F(t("assistant"), asC)),
+      body: el("div", { style: { display: "flex", flexDirection: "column", gap: "14px" } }, F(t("name"), nameI), F(t("nameEn"), nameEnI), F(t("owner"), ovC), F(t("assistant"), asC)),
       actions: [
         !isNew ? { label: t("delete"), class: "btn-danger", onClick: async (c) => { if (!(await confirmDialog(t("confirmDelete")))) return; store.set("groups", store.get("groups").filter((x) => x.id !== d.id)); c(); toast(t("saved"), "ok"); } } : null,
         { label: t("cancel"), onClick: (c) => c() },
-        { label: t("save"), class: "btn-primary", onClick: (c) => { d.name = nameI.value.trim(); if (!d.name) return toast(t("required"), "danger"); const arr = store.get("groups").slice(); const i = arr.findIndex((x) => x.id === d.id); if (i >= 0) arr[i] = d; else arr.push(d); store.set("groups", arr); c(); toast(t("saved"), "ok"); } },
+        { label: t("save"), class: "btn-primary", onClick: (c) => { d.name = nameI.value.trim(); d.nameEn = nameEnI.value.trim(); if (!d.name) return toast(t("required"), "danger"); const arr = store.get("groups").slice(); const i = arr.findIndex((x) => x.id === d.id); if (i >= 0) arr[i] = d; else arr.push(d); store.set("groups", arr); c(); toast(t("saved"), "ok"); } },
       ].filter(Boolean),
     });
   }

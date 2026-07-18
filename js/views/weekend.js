@@ -5,14 +5,14 @@ import { store, uid } from "../store.js";
 import { getLang, t } from "../i18n.js";
 import { el, icon, toast, modal, combo, confirmDialog } from "../ui.js";
 import { S, inMonth, monthName, fmtDate, monthDates } from "../state.js";
-import { weekendBoardHtml, weeklyCardHtml, kindMeetingDays } from "../features/boards.js";
+import { weekendBoardHtml, weeklyCardHtml, kindMeetingDays, pubLabel } from "../features/boards.js";
 import { exportPdf } from "../features/pdf.js";
 
 export function renderWeekend() {
   const lang = getLang();
   const canEdit = store.canEditKind("weekend");
   const pubs = store.get("publishers");
-  const pubName = (id) => pubs.find((p) => p.id === id)?.name || id || "";
+  const pubName = (id) => { const p = pubs.find((x) => x.id === id); return p ? pubLabel(p, lang) : (id || ""); };
 
   const rows = store.get("weekend").filter((w) => inMonth(w.date)).sort((a, b) => (a.date || "").localeCompare(b.date || ""));
   // ghost rows: every weekend date of the month is laid out even when unsaved
@@ -31,7 +31,7 @@ export function renderWeekend() {
         el("td", { style: { whiteSpace: "nowrap" } }, canEdit ? icon("plus", 15) : "")));
       return;
     }
-    const speaker = w.talk?.speaker ? (pubs.find((p) => p.id === w.talk.speaker)?.name || w.talk.speaker) : "";
+    const speaker = w.talk?.speaker ? pubName(w.talk.speaker) : "";
     tbody.append(el("tr", { class: canEdit ? "row-click" : "", onClick: canEdit ? () => openEditor(w) : null },
       el("td", {}, fmtDate(w.date, lang)),
       el("td", { class: "ta" }, w.talk?.theme || "—"),
@@ -70,7 +70,7 @@ export function renderWeekend() {
     const numI = el("input", { class: "input", type: "number", value: d.talk.number || "", placeholder: "#", style: { width: "90px" } });
     const congI = el("input", { class: "input ta", value: d.talk.speakerCong || "", placeholder: lang === "ta" ? "சபை (வெளியிலிருந்து)" : "Congregation (if visiting)" });
 
-    const opts = (role) => pubs.filter((p) => p.active !== false && (p.roles || []).includes(role)).map((p) => ({ value: p.id, label: p.name }));
+    const opts = (role) => pubs.filter((p) => p.active !== false && (p.roles || []).includes(role)).map((p) => ({ value: p.id, label: pubLabel(p, lang) }));
     const speakerC = combo({ options: opts("weekend.talk"), value: d.talk.speaker || null, placeholder: lang === "ta" ? "பேச்சாளர்" : "Speaker", allowFree: true, onSelect: (v) => { d.talk.speaker = v; } });
     const chairC = combo({ options: opts("weekend.chairman"), value: d.chairman || null, placeholder: t("chairman"), onSelect: (v) => { d.chairman = v; } });
     const condC = combo({ options: opts("weekend.wt.conductor"), value: d.wt.conductor || null, placeholder: lang === "ta" ? "நடத்துபவர்" : "Conductor", onSelect: (v) => { d.wt.conductor = v; } });

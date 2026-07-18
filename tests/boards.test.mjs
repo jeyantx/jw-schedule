@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 const { store } = await import("../js/store.js");
-const { kindFields, kindMeta, roleBoardHtml, fsmBoardHtml, weekendBoardHtml, weeklyCardHtml, displayName, sheetPrefs, boardTheme } =
+const { kindFields, kindMeta, roleBoardHtml, fsmBoardHtml, weekendBoardHtml, weeklyCardHtml, displayName, pubLabel, groupLabel, sheetPrefs, boardTheme } =
   await import("../js/features/boards.js");
 const { THEMES } = await import("../js/features/boardTemplate.js");
 
@@ -19,6 +19,26 @@ test("displayName: gender prefix, free text passthrough, empty", () => {
   assert.equal(displayName("p2"), "Sr. மேரி");
   assert.equal(displayName("Visiting Bro"), "Visiting Bro");
   assert.equal(displayName(null), "");
+});
+
+test("displayName / pubLabel: bilingual names follow the language", () => {
+  const pubs = [
+    { id: "b1", name: "ஜெயந்த்", nameEn: "Jeyanth", gender: "brother" },
+    { id: "s1", name: "மேரி", gender: "sister" }, // no nameEn → falls back
+  ];
+  // English UI prefers nameEn, keeps the Br./Sr. prefix
+  assert.equal(displayName("b1", pubs, "en"), "Br. Jeyanth");
+  assert.equal(displayName("b1", pubs, "ta"), "Br. ஜெயந்த்");
+  // fallback: English UI but no nameEn → Tamil name still resolves
+  assert.equal(displayName("s1", pubs, "en"), "Sr. மேரி");
+  // raw labels, no prefix
+  assert.equal(pubLabel(pubs[0], "en"), "Jeyanth");
+  assert.equal(pubLabel(pubs[0], "ta"), "ஜெயந்த்");
+  assert.equal(pubLabel(pubs[1], "en"), "மேரி");
+  // groupLabel mirrors the same preference
+  const g = { id: "g", name: "மகாலட்சுமி நகர்", nameEn: "Mahalakshmi Nagar" };
+  assert.equal(groupLabel(g, "en"), "Mahalakshmi Nagar");
+  assert.equal(groupLabel(g, "ta"), "மகாலட்சுமி நகர்");
 });
 
 test("kindFields: cleaning formats produce the 4 layouts", () => {

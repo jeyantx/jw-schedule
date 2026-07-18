@@ -6,7 +6,7 @@ import { store } from "../store.js";
 import { getLang, t } from "../i18n.js";
 import { el, icon } from "../ui.js";
 import { S, inMonth, monthName, fmtDate } from "../state.js";
-import { displayName, kindFields } from "../features/boards.js";
+import { displayName, kindFields, groupLabel } from "../features/boards.js";
 
 export function renderDashboard() {
   const lang = getLang();
@@ -86,7 +86,7 @@ export function renderDashboard() {
   function names(rec, kind) {
     const groups = store.get("groups");
     return kindFields(kind).map((f) => {
-      if (f.type === "group") return (groups.find((g) => g.id === rec[f.key]) || {}).name;
+      if (f.type === "group") { const g = groups.find((x) => x.id === rec[f.key]); return g ? groupLabel(g, lang) : null; }
       if (f.type === "person") return displayName(rec[f.key]);
       return null;
     }).filter(Boolean).join(" · ") || "—";

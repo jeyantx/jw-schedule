@@ -33,14 +33,26 @@ export function boardTheme(prefs = sheetPrefs()) {
 }
 
 // ---- shared helpers ---------------------------------------------------------
-export function displayName(idOrText, pubs = store.get("publishers")) {
+// Raw publisher name (no prefix) in the requested language: English UI prefers
+// nameEn (falls back to name), Tamil UI prefers name (falls back to nameEn).
+export function pubLabel(p, lang = getLang()) {
+  if (!p) return "";
+  return (lang === "en" ? (p.nameEn || p.name) : (p.name || p.nameEn)) || "";
+}
+// Group name in the requested language, same nameEn/name preference.
+export function groupLabel(g, lang = getLang()) {
+  if (!g) return "";
+  return (lang === "en" ? (g.nameEn || g.name) : (g.name || g.nameEn)) || "";
+}
+export function displayName(idOrText, pubs = store.get("publishers"), lang = getLang()) {
   if (!idOrText) return "";
   const p = pubs.find((x) => x.id === idOrText);
   if (!p) return String(idOrText); // free text (e.g. visiting speaker)
-  if (/^(Br|Sr)\./.test(p.name || "")) return p.name;
-  return `${p.gender === "sister" ? "Sr." : "Br."} ${p.name}`;
+  const raw = pubLabel(p, lang);
+  if (/^(Br|Sr)\./.test(raw)) return raw;
+  return `${p.gender === "sister" ? "Sr." : "Br."} ${raw}`;
 }
-const groupName = (id) => (store.get("groups").find((g) => g.id === id) || {}).name || (id || "");
+const groupName = (id) => { const g = store.get("groups").find((x) => x.id === id); return g ? groupLabel(g) : (id || ""); };
 const shortDate = (iso) => fmtDate(iso, lang()).replace(/,\s*\d{4}$/, "");
 const dateObj = (iso) => ({ label: shortDate(iso), iso });
 const fullDate = (iso) => ({ label: fmtDate(iso, lang()), iso });

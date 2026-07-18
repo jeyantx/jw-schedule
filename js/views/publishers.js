@@ -8,13 +8,14 @@ import { getLang, t } from "../i18n.js";
 import { el, icon, toast, modal, drawer, confirmDialog } from "../ui.js";
 import { fmtDate, S } from "../state.js";
 import { statsFor, workload, collectAssignments } from "../features/intelligence.js";
+import { pubLabel, groupLabel } from "../features/boards.js";
 
 export function renderPublishers() {
   const lang = getLang();
   const canEdit = store.canEditKind("publishers");
   const pubs = store.get("publishers");
   const groups = store.get("groups");
-  const groupName = (id) => groups.find((g) => g.id === id)?.name || "";
+  const groupName = (id) => { const g = groups.find((x) => x.id === id); return g ? groupLabel(g, lang) : ""; };
 
   let query = "";
   const search = el("input", { class: "input", placeholder: t("search"), style: { maxWidth: "280px" },
@@ -31,8 +32,8 @@ export function renderPublishers() {
 
   function paint() {
     const rows = pubs
-      .filter((p) => !query || (p.name || "").toLowerCase().includes(query))
-      .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+      .filter((p) => !query || (p.name || "").toLowerCase().includes(query) || (p.nameEn || "").toLowerCase().includes(query))
+      .sort((a, b) => pubLabel(a, lang).localeCompare(pubLabel(b, lang)));
     tbody.replaceChildren();
     if (!rows.length) { tbody.append(el("tr", {}, el("td", { colSpan: 5 }, el("div", { class: "empty" }, icon("users", 36), el("p", {}, t("noCong") && "No publishers yet")))));
       return; }
@@ -40,9 +41,10 @@ export function renderPublishers() {
       const chips = (p.roles || []).slice(0, 3).map((r) => el("span", { class: "chip" }, roleLabel(r, lang)));
       if ((p.roles || []).length > 3) chips.push(el("span", { class: "chip" }, `+${p.roles.length - 3}`));
       tbody.append(el("tr", { class: "row-click", onClick: () => openProfile(p) },
-        el("td", {}, el("div", { class: "row" },
-          el("span", { class: "ta", style: { fontWeight: 700 } }, p.name),
-          p.active === false ? el("span", { class: "badge muted" }, t("inactive")) : null)),
+        el("td", {}, el("div", { class: "row wrap" },
+          el("span", { class: "ta", style: { fontWeight: 700 } }, pubLabel(p, lang)),
+          p.active === false ? el("span", { class: "badge muted" }, t("inactive")) : null,
+          p.exempt ? el("span", { class: "badge muted ta" }, t("exempt")) : null)),
         el("td", { class: "hide-sm" }, el("span", { class: "chip" }, p.gender === "sister" ? t("sister") : t("brother"))),
         el("td", { class: "hide-sm ta" }, groupName(p.groupId) || "—"),
         el("td", {}, el("div", { class: "row wrap" }, chips.length ? chips : el("span", { class: "muted" }, "—"))),
@@ -63,17 +65,20 @@ export function renderPublishers() {
 function openEdit(pub) {
   const lang = getLang();
   const isNew = !pub;
-  const draft = pub ? JSON.parse(JSON.stringify(pub)) : { id: uid("p"), name: "", gender: "brother", groupId: "", roles: [], active: true };
+  const draft = pub ? JSON.parse(JSON.stringify(pub)) : { id: uid("p"), name: "", nameEn: "", gender: "brother", groupId: "", roles: [], active: true, baptized: true };
   const groups = store.get("groups");
 
   const nameI = el("input", { class: "input ta", value: draft.name, placeholder: t("name") });
+  const nameEnI = el("input", { class: "input", value: draft.nameEn || "", placeholder: t("nameEn") });
   const genderS = el("select", { class: "select" },
     el("option", { value: "brother", selected: draft.gender !== "sister" }, t("brother")),
     el("option", { value: "sister", selected: draft.gender === "sister" }, t("sister")));
   const groupS = el("select", { class: "select" },
     el("option", { value: "" }, "—"),
-    ...groups.map((g) => el("option", { value: g.id, selected: draft.groupId === g.id }, g.name)));
+    ...groups.map((g) => el("option", { value: g.id, selected: draft.groupId === g.id }, groupLabel(g, lang))));
   const activeC = el("input", { type: "checkbox", checked: draft.active !== false });
+  const baptizedC = el("input", { type: "checkbox", checked: draft.baptized !== false });
+  const exemptC = el("input", { type: "checkbox", checked: draft.exempt === true });
 
   // Role chips grouped by area
   const roleBox = el("div", { class: "row wrap", style: { gap: "6px" } });
@@ -87,11 +92,15 @@ function openEdit(pub) {
 
   const body = el("div", { class: "modal-body", style: { padding: 0 } },
     el("div", { class: "field" }, el("label", {}, t("name")), nameI),
+    el("div", { class: "field" }, el("label", {}, t("nameEn")), nameEnI),
     el("div", { class: "row", style: { gap: "12px" } },
       el("div", { class: "field grow" }, el("label", {}, t("gender")), genderS),
       el("div", { class: "field grow" }, el("label", {}, t("group")), groupS)),
     el("div", { class: "field" }, el("label", {}, t("roles")), roleBox),
-    el("label", { class: "row", style: { gap: "8px", cursor: "pointer" } }, activeC, el("span", {}, t("active"))));
+    el("div", { class: "row wrap", style: { gap: "16px" } },
+      el("label", { class: "row", style: { gap: "8px", cursor: "pointer" } }, activeC, el("span", {}, t("active"))),
+      el("label", { class: "row", style: { gap: "8px", cursor: "pointer" } }, baptizedC, el("span", { class: "ta" }, t("baptized"))),
+      el("label", { class: "row", style: { gap: "8px", cursor: "pointer" } }, exemptC, el("span", { class: "ta" }, t("exempt")))));
 
   modal({
     title: isNew ? t("add") : t("edit"),
@@ -103,7 +112,8 @@ function openEdit(pub) {
       } } : null,
       { label: t("cancel"), onClick: (c) => c() },
       { label: t("save"), class: "btn-primary", onClick: (close) => {
-        draft.name = nameI.value.trim(); draft.gender = genderS.value; draft.groupId = groupS.value; draft.active = activeC.checked;
+        draft.name = nameI.value.trim(); draft.nameEn = nameEnI.value.trim(); draft.gender = genderS.value; draft.groupId = groupS.value;
+        draft.active = activeC.checked; draft.baptized = baptizedC.checked; draft.exempt = exemptC.checked;
         if (!draft.name) { toast(t("required"), "danger"); return; }
         const arr = store.get("publishers").slice();
         const i = arr.findIndex((x) => x.id === draft.id);
@@ -121,7 +131,7 @@ function openProfile(pub) {
   const all = collectAssignments();
   const s = statsFor(pub.id, all);
   const wl = workload(all);
-  const name = (id) => store.get("publishers").find((p) => p.id === id)?.name || id;
+  const name = (id) => { const p = store.get("publishers").find((x) => x.id === id); return p ? pubLabel(p, lang) : id; };
 
   const pct = Math.round((wl.map[pub.id] || 0) / wl.max * 100);
   const vsAvg = s.total - wl.avg;
@@ -147,8 +157,8 @@ function openProfile(pub) {
 
   const body = el("div", {},
     el("div", { class: "row", style: { gap: "12px" } },
-      el("div", { class: "avatar", style: { width: "48px", height: "48px", fontSize: "1.1rem" } }, (pub.name || "?")[0]),
-      el("div", {}, el("div", { class: "ta", style: { fontWeight: 800, fontSize: "var(--fs-lg)" } }, pub.name),
+      el("div", { class: "avatar", style: { width: "48px", height: "48px", fontSize: "1.1rem" } }, (pubLabel(pub, lang) || "?")[0]),
+      el("div", {}, el("div", { class: "ta", style: { fontWeight: 800, fontSize: "var(--fs-lg)" } }, pubLabel(pub, lang)),
         el("div", { class: "hint ta" }, `${pub.gender === "sister" ? t("sister") : t("brother")}`))),
 
     el("div", { class: "grid-cards", style: { gridTemplateColumns: "1fr 1fr", marginTop: "16px", gap: "10px" } },

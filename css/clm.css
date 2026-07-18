@@ -55,3 +55,12 @@
 .cell.conflict { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); }
 .cell .part-title { font-weight: 700; }
 .cell .assistant { color: var(--text-2); font-weight: 500; font-size: var(--fs-xs); }
+
+/* apply-section portion-type chip (SC/FU/MD/EB/T) — sits under the min cell */
+.min-col { display: flex; flex-direction: column; gap: 3px; }
+.type-chip { height: 20px; padding: 0 2px; font-size: 0.68rem; font-weight: 700; color: var(--text-3);
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-sm); cursor: pointer; }
+.type-chip.static { display: inline-flex; align-items: center; justify-content: center; width: max-content; }
+
+/* week thumbnail (wol.jw.org) in the card head */
+.wk-thumb { width: 24px; height: 24px; border-radius: var(--r-sm); object-fit: cover; flex: none; }

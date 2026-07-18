@@ -18,8 +18,9 @@ export function buildClmHtml(weeks, { congName, month, lang, name, pubs, notes, 
     if (!id) return "";
     const p = (pubs || []).find((x) => x.id === id);
     if (!p) return name ? name(id) : String(id);
+    const raw = (lang === "en" ? (p.nameEn || p.name) : (p.name || p.nameEn)) || "";
     const prefix = p.gender === "sister" ? "Sr." : "Br.";
-    return p.name?.startsWith("Br.") || p.name?.startsWith("Sr.") ? p.name : `${prefix} ${p.name}`;
+    return raw.startsWith("Br.") || raw.startsWith("Sr.") ? raw : `${prefix} ${raw}`;
   };
   const main = (p) => (p.assignee ? disp(p.assignee) : (p.title || ""));
 
