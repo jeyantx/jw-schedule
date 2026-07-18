@@ -2,39 +2,41 @@
 // BOARD TEMPLATES — minimalist printable boards for the department schedules
 // (Audio/Video, Cleaning, Attendants, Field Service Meeting, Weekend meeting).
 //
-// Design language (from the user's reference templates):
-//   • thick dark outer frame, generous white space, thin grey row separators
-//   • section band: light stroke icon + UPPERCASE letter-spaced title in the
-//     schedule's accent colour, underlined in the same colour
-//   • date headers coloured by day (midweek blue, weekend orange) with a
-//     coloured underline segment per column
-//   • light stroke icons (inline SVG, no external assets)
+// Design (v3, per user review):
+//   • title band at the TOP of the board — light stroke icon + UPPERCASE
+//     letter-spaced title in the schedule's accent colour, with the
+//     congregation · month on the right; accent underline below
+//   • neutral single-colour headers — no per-day colours or coloured
+//     underline segments; weekday appears above the date ONLY when the
+//     schedule mixes weekdays (e.g. cleaning on midweek + weekend)
+//   • header text uses the same alignment + padding as its column's cells
+//   • A4-landscape proportions (default width 1082px ≈ A4 landscape with
+//     print margins); cell font steps down at >6 date columns so names fit
+//   • thin grey separators, subtle zebra, generous even padding
 //
-// Two layouts + a weekly card:
-//   renderRoleBoard(cfg)  — roles at LEFT, weeks on TOP   (AV, Cleaning, Attendants)
+// Layouts:
+//   renderRoleBoard(cfg)  — roles at LEFT, dates on TOP   (AV, Cleaning, Attendants)
 //   renderDateBoard(cfg)  — dates at LEFT, roles on TOP   (Weekend, FSM)
 //   renderBoardCard(cfg)  — one date's card for the WhatsApp reminder
 //
-// Both boards accept:
-//   { title, icon, accent, theme, dates|rows..., guideline, notes }
-//   theme: a THEMES key or a full theme object (see THEMES below).
-// Unlike the CLM sheet (quirks-mode replica), boards are standard documents.
+// theme: a THEMES key or a full theme object. Unlike the CLM sheet (a
+// quirks-mode replica of the reference), boards are standard documents.
 // ============================================================================
 import { esc, imgSrc } from "./sheetKit.js";
 
 // ---- theme presets (Settings shows these names; every colour overridable) --
 export const THEMES = {
-  "light-1": { name: "Light · Classic", frame: "#1f2a37", text: "#1f2937", muted: "#6b7280",
-    grid: "#e5e7eb", bg: "#ffffff", wed: "#1d4ed8", sun: "#c2570b",
+  "light-1": { name: "Light · Classic", frame: "#25303c", text: "#1f2937", muted: "#6b7280",
+    grid: "#e5e7eb", zebra: "#f8fafb", bg: "#ffffff",
     accents: { av: "#1d4ed8", cleaning: "#15803d", attendant: "#0f766e", fsm: "#b45309", weekend: "#9d2146", clm: "#3c7f8b" } },
   "light-2": { name: "Light · Ocean", frame: "#0f3554", text: "#123047", muted: "#5b7285",
-    grid: "#dbe6ee", bg: "#ffffff", wed: "#0369a1", sun: "#b45309",
+    grid: "#dbe6ee", zebra: "#f6fafd", bg: "#ffffff",
     accents: { av: "#0369a1", cleaning: "#0d9488", attendant: "#2563eb", fsm: "#a16207", weekend: "#7c3aed", clm: "#3c7f8b" } },
   "light-3": { name: "Light · Garden", frame: "#233c2c", text: "#1e3328", muted: "#5f7568",
-    grid: "#e0e8e2", bg: "#ffffff", wed: "#166534", sun: "#b4530a",
+    grid: "#e0e8e2", zebra: "#f7faf7", bg: "#ffffff",
     accents: { av: "#166534", cleaning: "#3f6212", attendant: "#0f766e", fsm: "#92400e", weekend: "#9f1239", clm: "#3c7f8b" } },
   "light-4": { name: "Light · Berry", frame: "#3b1f33", text: "#331b2c", muted: "#7a6273",
-    grid: "#ecdfe8", bg: "#ffffff", wed: "#9d174d", sun: "#b45309",
+    grid: "#ecdfe8", zebra: "#fbf7fa", bg: "#ffffff",
     accents: { av: "#9d174d", cleaning: "#15803d", attendant: "#6d28d9", fsm: "#b45309", weekend: "#be123c", clm: "#3c7f8b" } },
 };
 export const resolveTheme = (t) => (typeof t === "string" ? THEMES[t] : t && t.name ? t : null) || THEMES["light-1"];
@@ -72,41 +74,39 @@ const iconHtml = (ic, size, cls) => !ic ? "" :
 const baseCss = (T, width) => `
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#fff;font-family:"Noto Sans Tamil",Arial,sans-serif;color:${T.text};-webkit-print-color-adjust:exact;print-color-adjust:exact}
-.board{width:${width}px;background:${T.bg};border:2.5px solid ${T.frame};border-radius:14px;overflow:hidden;padding:0 0 12px}
-table{border-collapse:collapse;width:100%;table-layout:fixed}
-.band td{padding:15px 20px 11px;border-bottom:2.5px solid var(--accent);background:color-mix(in srgb,var(--accent) 6%,#fff)}
-.band .bt{display:flex;align-items:center;gap:12px;color:var(--accent);font-size:16px;font-weight:700;letter-spacing:.12em}
-.band .sub{color:${T.muted};font-size:11.5px;font-weight:600;letter-spacing:.06em;margin-top:2px}
+.board{width:${width}px;background:${T.bg};border:2px solid ${T.frame};border-radius:14px;overflow:hidden;padding:0 0 10px}
+.band{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:15px 22px 12px;border-bottom:2.5px solid var(--accent);background:color-mix(in srgb,var(--accent) 5%,#fff)}
+.band .bt{display:inline-flex;align-items:center;gap:12px;color:var(--accent);font-size:16.5px;font-weight:700;letter-spacing:.1em}
+.band .bm{color:${T.muted};font-size:12.5px;font-weight:700;letter-spacing:.03em;text-align:right;line-height:1.45}
+table{border-collapse:collapse;width:100%;table-layout:fixed;--cfs:14px;--cpx:10px}
 th{font-weight:700}
-.dh{padding:10px 6px 8px;text-align:center;border-bottom:3px solid currentColor}
-.dh .wd{display:block;font-size:10.5px;font-weight:700;letter-spacing:.1em;opacity:.72;margin-bottom:1px}
-.dh .dt{font-size:14.5px;font-weight:700}
-.ch{padding:10px 6px 8px;text-align:center;color:${T.muted};border-bottom:2px solid ${T.grid}}
-.ch .in{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;letter-spacing:.05em}
-.stub{border-bottom:3px solid ${T.frame}}
-.rl{display:flex;align-items:center;gap:10px;font-size:14px;font-weight:700;color:${T.text};padding:0 8px 0 20px;overflow-wrap:anywhere}
-.rl svg{color:${T.muted};flex:none}
-tr.r td{border-bottom:1px solid ${T.grid};padding:11px 8px;vertical-align:middle}
+.ch{padding:11px 10px 8px;color:${T.muted};font-size:11.5px;font-weight:700;letter-spacing:.06em;border-bottom:1.5px solid ${T.grid};text-align:center;vertical-align:bottom}
+.ch .in{display:inline-flex;align-items:center;gap:6px}
+.ch .wd{display:block;font-size:10px;letter-spacing:.08em;margin-bottom:1px}
+.ch .dt{display:block;font-size:13.5px;letter-spacing:0;color:${T.text}}
+tr.r td{border-bottom:1px solid ${T.grid};padding:12px var(--cpx);vertical-align:middle}
 tr.r.alt td{background:${T.zebra || "#f8fafb"}}
 tr.r:last-child td{border-bottom:none}
-.cell{font-size:14px;font-weight:600;text-align:center;overflow-wrap:anywhere}
+.rl{display:flex;align-items:center;gap:10px;font-size:13.5px;font-weight:700;color:${T.text};padding:0 8px 0 22px;overflow-wrap:anywhere}
+.rl svg{color:${T.muted};flex:none}
+.dl{font-size:14px;font-weight:700;color:var(--accent);padding-left:22px;overflow-wrap:anywhere}
+.dl .wd{display:block;font-size:10px;letter-spacing:.08em;color:${T.muted}}
+.cell{font-size:var(--cfs);font-weight:600;text-align:center;overflow-wrap:anywhere}
 .cell .no{display:inline-block;min-width:22px;padding:1px 6px;margin-right:7px;border-radius:99px;background:color-mix(in srgb,var(--accent) 12%,#fff);color:var(--accent);font-size:12px;font-weight:700;text-align:center}
 .cell .hint{display:block;font-size:11px;color:${T.muted};font-weight:600;margin-top:1px}
-.dl{font-size:14px;font-weight:700;padding-left:20px;overflow-wrap:anywhere}
-.dl .wd{display:block;font-size:10px;letter-spacing:.09em;opacity:.72}
-.foot{padding:12px 20px 2px;font-size:12px;color:${T.muted}}
+.foot{padding:12px 22px 2px;font-size:12px;color:${T.muted}}
 .foot b{color:${T.text}}
 .guide{display:flex;gap:8px;align-items:flex-start;margin-top:6px;font-style:italic}
 .note-hi{color:#b91c1c}
-.title{text-align:center;font-size:19px;font-weight:700;padding:2px 0 14px}
-.title .mo{display:block;font-size:13.5px;color:${T.muted};font-weight:700;letter-spacing:.08em;margin-top:2px}
 `;
 const WEEKDAYS = {
   ta: ["ஞாயிறு", "திங்கள்", "செவ்வாய்", "புதன்", "வியாழன்", "வெள்ளி", "சனி"],
   en: ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"],
 };
-const weekdayOf = (iso, lang = "ta") =>
-  iso ? WEEKDAYS[lang === "en" ? "en" : "ta"][new Date(iso + "T00:00:00").getDay()] : "";
+const dayOf = (iso) => (iso ? new Date(iso + "T00:00:00").getDay() : null);
+const weekdayOf = (iso, lang = "ta") => (iso ? WEEKDAYS[lang === "en" ? "en" : "ta"][dayOf(iso)] : "");
+// show weekdays only when the dates span more than one weekday
+const mixedDays = (isos) => new Set(isos.filter((x) => x != null).map(dayOf)).size > 1;
 
 const doc = (css, body) => `<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><title>Schedule</title>
@@ -114,8 +114,9 @@ const doc = (css, body) => `<!DOCTYPE html>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Tamil:wght@400;600;700&display=swap" rel="stylesheet">
 <style>${css}</style></head><body>${body}</body></html>`;
 
-const bandRow = (cols, icon, title, subtitle) =>
-  `<tr class="band"><td colspan="${cols}"><div class="bt">${iconHtml(icon, 22)}<span>${esc(title)}</span></div>${subtitle ? `<div class="sub">${esc(subtitle)}</div>` : ""}</td></tr>`;
+const bandHtml = (icon, title, meta) =>
+  `<div class="band"><span class="bt">${iconHtml(icon, 22)}<span>${esc(title)}</span></span>${meta ? `<span class="bm">${esc(meta)}</span>` : ""}</div>`;
+const bandMeta = (cfg) => cfg.meta ?? [cfg.congName, cfg.month].filter(Boolean).join(" · ");
 
 const footHtml = (notes, guideline, labels = {}) => {
   let h = "";
@@ -125,80 +126,76 @@ const footHtml = (notes, guideline, labels = {}) => {
   return h;
 };
 
-// date colour: explicit d.color > weekend/midweek by ISO date > frame colour
-const dateColor = (d, T) => {
-  if (d.color) return d.color;
-  if (d.iso) { const day = new Date(d.iso + "T00:00:00").getDay(); return day === 0 || day === 6 ? T.sun : T.wed; }
-  return T.frame;
-};
-
-// ---- layout 1: roles at left, dates on top (AV / Cleaning / Attendants) ----
-// cfg = { title, subtitle?, icon, accent, theme, width?, leftWidth?,
-//         dates: [{ label, iso?, color? }],
-//         rows:  [{ icon?, label, cells: [string|{text,hint}] }],
-//         notes?, guideline?, labels? }
 const cellHtml = (c) => c && typeof c === "object"
   ? `${c.no != null ? `<span class="no">${esc(c.no)}</span>` : ""}${esc(c.text)}${c.hint ? `<span class="hint">${esc(c.hint)}</span>` : ""}`
   : esc(c);
-const dateHead = (d, T, lang) => {
-  const wd = d.weekday ?? weekdayOf(d.iso, lang);
-  return `<th class="dh" style="color:${dateColor(d, T)}">${wd ? `<span class="wd">${esc(wd)}</span>` : ""}<span class="dt">${esc(d.label)}</span></th>`;
-};
 
+// ---- layout 1: roles at left, dates on top (AV / Cleaning / Attendants) ----
+// cfg = { title, icon, accent, theme, kind?, congName?, month?, meta?, lang?,
+//         width?, leftWidth?,
+//         dates: [{ label, iso? }],
+//         rows:  [{ icon?, label, cells: [string|{text,hint,no}] }],
+//         notes?, guideline?, labels? }
 export function renderRoleBoard(cfg) {
   const T = resolveTheme(cfg.theme);
   const accent = cfg.accent || T.accents[cfg.kind] || T.frame;
-  const width = cfg.width || 1080;
-  const leftW = cfg.leftWidth || 230;
+  const width = cfg.width || 1082;
+  const leftW = cfg.leftWidth || 190;
   const dates = cfg.dates || [];
+  const dense = dates.length > 6;
+  const cfs = dense ? "12.5px" : "14px";
+  const cpx = dense ? "5px" : "10px";
+  const showWd = cfg.showWeekday ?? mixedDays(dates.map((d) => d.iso));
   const colgroup = `<colgroup><col style="width:${leftW}px">${dates.map(() => `<col>`).join("")}</colgroup>`;
-  const head = `<tr><th class="stub"></th>${dates.map((d) => dateHead(d, T, cfg.lang)).join("")}</tr>`;
+  const head = `<tr><th class="ch"></th>${dates.map((d) =>
+    `<th class="ch">${showWd ? `<span class="wd">${esc(d.weekday ?? weekdayOf(d.iso, cfg.lang))}</span>` : ""}<span class="dt">${esc(d.label)}</span></th>`).join("")}</tr>`;
   const body = (cfg.rows || []).map((r, ri) =>
     `<tr class="r${ri % 2 ? " alt" : ""}"><td><div class="rl">${iconHtml(r.icon, 18)}<span>${esc(r.label)}</span></div></td>` +
     dates.map((_, i) => `<td class="cell">${cellHtml((r.cells || [])[i])}</td>`).join("") + `</tr>`).join("");
-  const table = `<table style="--accent:${accent}">${colgroup}${head}${bandRow(dates.length + 1, cfg.icon, cfg.title, cfg.subtitle)}${body}</table>`;
-  const heading = cfg.month ? `<div class="title">${esc(cfg.heading || "")}<span class="mo">${esc(cfg.month)}</span></div>` : "";
-  return doc(baseCss(T, width), `${heading}<div class="board">${table}${footHtml(cfg.notes, cfg.guideline, cfg.labels)}</div>`);
+  const table = `<table style="--accent:${accent};--cfs:${cfs};--cpx:${cpx}">${colgroup}${head}${body}</table>`;
+  return doc(baseCss(T, width),
+    `<div class="board" style="--accent:${accent}">${bandHtml(cfg.icon, cfg.title, bandMeta(cfg))}${table}${footHtml(cfg.notes, cfg.guideline, cfg.labels)}</div>`);
 }
 
 // ---- layout 2: dates at left, roles on top (Weekend / FSM) ------------------
-// cfg = { title, icon, accent, theme, width?, dateWidth?,
+// cfg = { title, icon, accent, theme, kind?, congName?, month?, meta?, lang?,
+//         width?, dateWidth?,
 //         columns: [{ key, icon?, label, width?, align? }],
-//         rows: [{ date: {label, iso?, color?}, cells: { key: string|{text,hint} } }],
+//         rows: [{ date: {label, iso?}, cells: { key: string|{text,hint,no} } }],
 //         notes?, guideline?, labels? }
 export function renderDateBoard(cfg) {
   const T = resolveTheme(cfg.theme);
   const accent = cfg.accent || T.accents[cfg.kind] || T.frame;
-  const width = cfg.width || 1080;
-  const dateW = cfg.dateWidth || 118;
+  const width = cfg.width || 1082;
+  const dateW = cfg.dateWidth || 120;
   const columns = cfg.columns || [];
-  const cols = columns.length + 1;
+  const showWd = cfg.showWeekday ?? mixedDays((cfg.rows || []).map((r) => r.date && r.date.iso));
   const colgroup = `<colgroup><col style="width:${dateW}px">${columns.map((c) => c.width ? `<col style="width:${c.width}px">` : `<col>`).join("")}</colgroup>`;
+  // header alignment/padding mirrors the column's cells so labels sit over content
   const head = `<tr><th class="ch"></th>${columns.map((c) =>
-    `<th class="ch"><span class="in">${iconHtml(c.icon, 15)}${esc(c.label)}</span></th>`).join("")}</tr>`;
-  const body = (cfg.rows || []).map((r, ri) => {
-    const wd = r.date.weekday ?? weekdayOf(r.date.iso, cfg.lang);
-    return `<tr class="r${ri % 2 ? " alt" : ""}"><td><div class="dl" style="color:${dateColor(r.date, T)}">${wd ? `<span class="wd">${esc(wd)}</span>` : ""}${esc(r.date.label)}</div></td>` +
-      columns.map((c) => `<td class="cell"${c.align ? ` style="text-align:${c.align}"` : ""}>${cellHtml((r.cells || {})[c.key])}</td>`).join("") + `</tr>`;
-  }).join("");
-  const table = `<table style="--accent:${accent}">${colgroup}${bandRow(cols, cfg.icon, cfg.title, cfg.subtitle)}${head}${body}</table>`;
-  const heading = cfg.month ? `<div class="title">${esc(cfg.heading || "")}<span class="mo">${esc(cfg.month)}</span></div>` : "";
-  return doc(baseCss(T, width), `${heading}<div class="board">${table}${footHtml(cfg.notes, cfg.guideline, cfg.labels)}</div>`);
+    `<th class="ch" style="text-align:${c.align || "center"};padding-left:10px;padding-right:10px"><span class="in">${iconHtml(c.icon, 15)}${esc(c.label)}</span></th>`).join("")}</tr>`;
+  const body = (cfg.rows || []).map((r, ri) =>
+    `<tr class="r${ri % 2 ? " alt" : ""}"><td><div class="dl">${showWd ? `<span class="wd">${esc(r.date.weekday ?? weekdayOf(r.date.iso, cfg.lang))}</span>` : ""}${esc(r.date.label)}</div></td>` +
+    columns.map((c) => `<td class="cell"${c.align ? ` style="text-align:${c.align}"` : ""}>${cellHtml((r.cells || {})[c.key])}</td>`).join("") + `</tr>`).join("");
+  const table = `<table style="--accent:${accent}">${colgroup}${head}${body}</table>`;
+  return doc(baseCss(T, width),
+    `<div class="board" style="--accent:${accent}">${bandHtml(cfg.icon, cfg.title, bandMeta(cfg))}${table}${footHtml(cfg.notes, cfg.guideline, cfg.labels)}</div>`);
 }
 
 // ---- weekly card (WhatsApp reminder) ----------------------------------------
-// cfg = { title, icon, accent, theme, date: {label, iso?, color?}, width?,
-//         fields: [{ icon?, label, value: string|string[] }], guideline? }
+// cfg = { title, icon, accent, theme, kind?, date: {label, iso?}, width?,
+//         fields: [{ icon?, label, value: string|string[] }], notes?, guideline? }
 export function renderBoardCard(cfg) {
   const T = resolveTheme(cfg.theme);
   const accent = cfg.accent || T.accents[cfg.kind] || T.frame;
   const width = cfg.width || 420;
-  const rows = (cfg.fields || []).map((f) => {
+  const rows = (cfg.fields || []).map((f, i) => {
     const v = Array.isArray(f.value) ? f.value.map(esc).join("<br>") : esc(f.value);
-    return `<tr class="r"><td style="width:45%"><div class="rl">${iconHtml(f.icon, 17)}<span>${esc(f.label)}</span></div></td><td class="cell" style="text-align:left;padding-left:2px">${v}</td></tr>`;
+    return `<tr class="r${i % 2 ? " alt" : ""}"><td style="width:45%"><div class="rl">${iconHtml(f.icon, 17)}<span>${esc(f.label)}</span></div></td><td class="cell" style="text-align:left;padding-left:2px">${v}</td></tr>`;
   }).join("");
-  const dateLine = `<tr><td colspan="2" style="padding:10px 18px 8px;border-bottom:1px solid ${T.grid}">` +
-    `<span style="display:inline-flex;align-items:center;gap:8px;font-weight:700;font-size:15px;color:${dateColor(cfg.date || {}, T)}">${iconSvg("cal", 16)}${esc((cfg.date || {}).label)}</span></td></tr>`;
-  const table = `<table style="--accent:${accent}">${bandRow(2, cfg.icon, cfg.title, cfg.subtitle)}${dateLine}${rows}</table>`;
-  return doc(baseCss(T, width), `<div class="board">${table}${footHtml(cfg.notes, cfg.guideline, cfg.labels)}</div>`);
+  const dateLine = `<tr><td colspan="2" style="padding:10px 22px 8px;border-bottom:1.5px solid ${T.grid}">` +
+    `<span style="display:inline-flex;align-items:center;gap:8px;font-weight:700;font-size:15px;color:var(--accent)">${iconSvg("cal", 16)}${esc((cfg.date || {}).label)}</span></td></tr>`;
+  const table = `<table style="--accent:${accent}">${dateLine}${rows}</table>`;
+  return doc(baseCss(T, width),
+    `<div class="board" style="--accent:${accent}">${bandHtml(cfg.icon, cfg.title, bandMeta(cfg))}${table}${footHtml(cfg.notes, cfg.guideline, cfg.labels)}</div>`);
 }

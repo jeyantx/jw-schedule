@@ -109,7 +109,7 @@ export function roleBoardHtml(kind, records, { congName, month } = {}) {
   return renderRoleBoard({
     kind, theme: boardTheme(prefs), lang: lang(),
     title: meta.title, icon: meta.icon,
-    heading: congName, month,
+    congName, month,
     dates: recs.map((r) => dateObj(r[dateField])),
     rows: fields.map((f) => ({ icon: f.icon, label: f.label, cells: recs.map((r) => fieldValue(kind, r, f)) })),
     notes: prefs.notes?.[kind], guideline: guideline(prefs, kind),
@@ -123,12 +123,12 @@ export function fsmBoardHtml(records, { congName, month } = {}) {
   const recs = [...records].sort((a, b) => (a.date || "").localeCompare(b.date || ""));
   return renderDateBoard({
     kind: "fsm", theme: boardTheme(prefs), lang: lang(),
-    title: meta.title, icon: meta.icon, heading: congName, month, width: 1120,
+    title: meta.title, icon: meta.icon, congName, month, dateWidth: 112,
     columns: [
-      { key: "time", icon: "clock", label: L("நேரம்", "Time"), width: 130 },
+      { key: "time", icon: "clock", label: L("நேரம்", "Time"), width: 140 },
       { key: "loc", icon: "pin", label: L("கூட்ட இடம்", "Meeting Location"), align: "left" },
       { key: "field", icon: "home", label: L("வெளி ஊழியப் பகுதி", "Field Territory"), align: "left" },
-      { key: "conductor", icon: "chair", label: L("நடத்துபவர்", "Conductor"), width: 170 },
+      { key: "conductor", icon: "chair", label: L("நடத்துபவர்", "Conductor"), width: 175 },
     ],
     rows: recs.map((r) => ({ date: dateObj(r.date), cells: {
       time: r.time || "", loc: { text: r.loc || "", hint: r.zoom ? "+ Zoom" : "" },
@@ -145,13 +145,13 @@ export function weekendBoardHtml(records, { congName, month, notes } = {}) {
   const recs = [...records].sort((a, b) => (a.date || "").localeCompare(b.date || ""));
   return renderDateBoard({
     kind: "weekend", theme: boardTheme(prefs), lang: lang(),
-    title: meta.title, icon: meta.icon, heading: congName, month, width: 1120, dateWidth: 96,
+    title: meta.title, icon: meta.icon, congName, month, dateWidth: 112,
     columns: [
-      { key: "chair", icon: "chair", label: L("சேர்மன்", "Chairman"), width: 128 },
+      { key: "chair", icon: "chair", label: L("சேர்மன்", "Chairman"), width: 155 },
       { key: "talk", icon: "talk", label: L("பொது பேச்சு", "Public Talk"), align: "left" },
-      { key: "speaker", icon: "mic", label: L("பேச்சாளர்", "Speaker"), width: 168 },
-      { key: "cond", icon: "book", label: L("காவற்கோபுரம்", "Watchtower"), width: 138 },
-      { key: "reader", icon: "reader", label: L("வாசிப்பு", "Reader"), width: 128 },
+      { key: "speaker", icon: "mic", label: L("பேச்சாளர்", "Speaker"), width: 180, align: "left" },
+      { key: "cond", icon: "book", label: L("காவற்கோபுரம்", "Watchtower"), width: 145 },
+      { key: "reader", icon: "reader", label: L("வாசிப்பு", "Reader"), width: 130 },
     ],
     rows: recs.map((w) => ({ date: dateObj(w.date), cells: {
       chair: displayName(w.chairman),
