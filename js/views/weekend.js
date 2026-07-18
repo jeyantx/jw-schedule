@@ -4,8 +4,8 @@
 import { store, uid } from "../store.js";
 import { getLang, t } from "../i18n.js";
 import { el, icon, toast, modal, combo, confirmDialog } from "../ui.js";
-import { S, inMonth, monthName, fmtDate } from "../state.js";
-import { weekendBoardHtml, weeklyCardHtml } from "../features/boards.js";
+import { S, inMonth, monthName, fmtDate, monthDates } from "../state.js";
+import { weekendBoardHtml, weeklyCardHtml, kindMeetingDays } from "../features/boards.js";
 import { exportPdf } from "../features/pdf.js";
 
 export function renderWeekend() {
@@ -15,9 +15,22 @@ export function renderWeekend() {
   const pubName = (id) => pubs.find((p) => p.id === id)?.name || id || "";
 
   const rows = store.get("weekend").filter((w) => inMonth(w.date)).sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+  // ghost rows: every weekend date of the month is laid out even when unsaved
+  const ghostDates = kindMeetingDays("weekend").flatMap((wd) => monthDates(wd)).filter((d) => !rows.some((r) => r.date === d));
+  const lines = [
+    ...rows.map((w) => ({ date: w.date || "", rec: w })),
+    ...ghostDates.map((d) => ({ date: d, rec: null })),
+  ].sort((a, b) => a.date.localeCompare(b.date));
 
   const tbody = el("tbody");
-  rows.forEach((w) => {
+  lines.forEach(({ date, rec: w }) => {
+    if (!w) {
+      tbody.append(el("tr", { class: `ghost ${canEdit ? "row-click" : ""}`, onClick: canEdit ? () => openEditor(null, date) : null },
+        el("td", {}, fmtDate(date, lang)),
+        ...[0, 1, 2, 3].map(() => el("td", { class: "muted" }, "—")),
+        el("td", { style: { whiteSpace: "nowrap" } }, canEdit ? icon("plus", 15) : "")));
+      return;
+    }
     const speaker = w.talk?.speaker ? (pubs.find((p) => p.id === w.talk.speaker)?.name || w.talk.speaker) : "";
     tbody.append(el("tr", { class: canEdit ? "row-click" : "", onClick: canEdit ? () => openEditor(w) : null },
       el("td", {}, fmtDate(w.date, lang)),
@@ -30,7 +43,7 @@ export function renderWeekend() {
         canEdit ? icon("pencil", 15) : null)));
   });
 
-  const table = rows.length ? el("div", { class: "tbl-wrap" },
+  const table = lines.length ? el("div", { class: "tbl-wrap" },
     el("table", { class: "tbl" }, el("thead", {}, el("tr", {},
       el("th", {}, t("date")), el("th", {}, lang === "ta" ? "தலைப்பு" : "Public Talk"),
       el("th", {}, lang === "ta" ? "பேச்சாளர்" : "Speaker"),
@@ -42,17 +55,17 @@ export function renderWeekend() {
     el("div", { class: "row wrap" },
       rows.length ? el("button", { class: "btn", onClick: () => exportPdf(
         weekendBoardHtml(rows, { congName: store.congregation?.name || "", month: monthName(S.month, lang) }),
-        `weekend-${monthName(S.month, "en").replace(" ", "-").toLowerCase()}`, { landscape: true }) }, icon("download", 16), "PDF") : null,
+        `weekend-${monthName(S.month, "en").replace(" ", "-").toLowerCase()}`, { landscape: false }) }, icon("download", 16), "PDF") : null,
       canEdit ? el("button", { class: "btn btn-primary", onClick: () => openEditor(null) }, icon("plus", 16), t("add")) : null));
 
   return el("div", { class: "view" }, head, table);
 
-  function openEditor(rec) {
+  function openEditor(rec, presetDate) {
     const isNew = !rec;
     const d = rec ? JSON.parse(JSON.stringify(rec)) : { id: uid("wk"), talk: {}, wt: {} };
     d.talk = d.talk || {}; d.wt = d.wt || {};
 
-    const dateI = el("input", { class: "input", type: "date", value: d.date || monthFirst() });
+    const dateI = el("input", { class: "input", type: "date", value: d.date || presetDate || monthFirst() });
     const themeI = el("input", { class: "input ta", value: d.talk.theme || "", placeholder: lang === "ta" ? "பேச்சின் தலைப்பு" : "Talk theme" });
     const numI = el("input", { class: "input", type: "number", value: d.talk.number || "", placeholder: "#", style: { width: "90px" } });
     const congI = el("input", { class: "input ta", value: d.talk.speakerCong || "", placeholder: lang === "ta" ? "சபை (வெளியிலிருந்து)" : "Congregation (if visiting)" });

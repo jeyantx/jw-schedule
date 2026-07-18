@@ -100,3 +100,17 @@ test("five weeks supported; week columns extend with the reference widths", () =
   assert.equal(count(html, /class="daydate day\d"/g), 5);
   assert.ok(html.includes(".day5{--day:"));
 });
+
+test("print-fit: month is A4 landscape + zoomed to fit; table wrapped in .fit", () => {
+  const html = renderClmSheet(month([week(), week(), week(), week()]));
+  assert.ok(html.includes("@page{size:A4 landscape;margin:10mm}"));
+  assert.ok(html.includes('<div class="fit"><table>'));
+  // over-wide reference table (~1465px) must be scaled under the printable width
+  assert.ok(/@media print\{\.fit\{zoom:0\.\d+\}\}/.test(html));
+});
+
+test("print-fit: single-week fragment is A4 portrait and not shrunk (zoom omitted)", () => {
+  const html = renderClmWeek(week());
+  assert.ok(html.includes("@page{size:A4 portrait;margin:10mm}"));
+  assert.ok(!html.includes("zoom:")); // one narrow week already fits the page
+});

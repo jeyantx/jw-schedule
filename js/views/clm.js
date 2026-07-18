@@ -6,9 +6,11 @@ import { store, uid } from "../store.js";
 import { CLM_SECTIONS, ROLES } from "../config.js";
 import { getLang, t } from "../i18n.js";
 import { el, icon, toast, combo, confirmDialog } from "../ui.js";
-import { S, inMonth, monthName, fmtDate } from "../state.js";
+import { S, inMonth, monthName, fmtDate, monthDates } from "../state.js";
+import { kindMeetingDays } from "../features/boards.js";
 import { buildClmHtml, buildClmWeekHtml } from "../features/clmSheet.js";
 import { exportPdf } from "../features/pdf.js";
+import { assetDataUri } from "../features/assets.js";
 
 let editing = null; // { weekId, path, type }
 
@@ -49,14 +51,22 @@ export function renderClm() {
     el("div", { class: "grow" }),
     weeks.length ? pdfBtn : null);
 
-  /* -- grid -- */
+  /* -- grid: saved weeks + ghost placeholders for the month's midweek dates -- */
+  const ghostDates = canEdit
+    ? kindMeetingDays("clm").flatMap((wd) => monthDates(wd)).filter((d) => !weeks.some((w) => w.date === d))
+    : [];
+  const items = [
+    ...weeks.map((w) => ({ date: w.date || "", node: () => weekCard(w) })),
+    ...ghostDates.map((d) => ({ date: d, node: () => ghostCard(d) })),
+  ].sort((a, b) => a.date.localeCompare(b.date));
+
   let gridInner;
-  if (!weeks.length) {
+  if (!items.length) {
     gridInner = el("div", { class: "empty" }, icon("gem", 40),
       el("p", {}, `${monthName(S.month, lang)} — ${t("noCong") ? "no weeks yet" : ""}`),
       canEdit ? el("p", { class: "hint" }, `${t("addWeek")} ↑`) : null);
   } else {
-    gridInner = el("div", { class: "clm-grid" }, weeks.map((w) => weekCard(w)));
+    gridInner = el("div", { class: "clm-grid" }, items.map((it) => it.node()));
   }
 
   const head = el("div", { class: "view-head" }, el("h2", {}, t("clm")), el("p", {}, monthName(S.month, lang)));
@@ -93,6 +103,16 @@ export function renderClm() {
     return card;
   }
 
+  // Placeholder for a midweek date with no saved week yet — UI-only (never
+  // exported); one click creates the real blank week for that date.
+  function ghostCard(date) {
+    return el("div", { class: "clm-week ghost", role: "button", tabIndex: 0,
+      onClick: () => { commit(blankWeek(date)); toast(t("saved"), "ok"); },
+      onKeydown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); commit(blankWeek(date)); toast(t("saved"), "ok"); } } },
+      el("div", { class: "clm-week-head" }, fmtDate(date, lang)),
+      el("div", { class: "ghost-add" }, icon("plus", 16), el("span", {}, t("addWeek"))));
+  }
+
   function labelLine(label, valueNode) {
     return el("div", { class: "clm-line" }, el("span", { class: "lbl" }, label), valueNode);
   }
@@ -124,7 +144,7 @@ export function renderClm() {
         options: optionsFor(role, gender),
         value: pubs.some((p) => p.id === val) ? val : null,
         placeholder: t("unassigned"),
-        allowFree,
+        allowFree, autofocus: true,
         onSelect: (v) => {
           const next = clone(w);
           if (allowFree && v && !pubs.some((p) => p.id === v)) { setPath(next, path.replace(".assignee", ".title"), v); setPath(next, path, null); }
@@ -147,7 +167,7 @@ export function renderClm() {
     const val = getPath(w, path);
     const isEditingHere = editing && editing.weekId === w.id && editing.path === path;
     if (canEdit && isEditingHere) {
-      return combo({ options: optionsFor(role, gender), value: val || null, placeholder: t("assistant"),
+      return combo({ options: optionsFor(role, gender), value: val || null, placeholder: t("assistant"), autofocus: true,
         onSelect: (v) => { const next = clone(w); setPath(next, path, v); editing = null; commit(next); } });
     }
     if (!val && !canEdit) return el("span", {});
@@ -156,11 +176,12 @@ export function renderClm() {
   }
 
   function minInput(w, path) {
-    const inp = el("input", { class: "input", type: "number", min: 1, max: 90, value: getPath(w, path) || "", style: { width: "70px", height: "28px" } });
+    // 20px tall: nested inside the padded .min.cell (5+20+4 ≈ the 28px display box) so the row doesn't jump
+    const inp = el("input", { class: "input", type: "number", min: 1, max: 90, value: getPath(w, path) || "", style: { width: "44px", height: "20px", padding: "0 4px", fontSize: "var(--fs-xs)" } });
     const done = () => { const next = clone(w); setPath(next, path, parseInt(inp.value) || null); editing = null; commit(next); };
     inp.addEventListener("blur", done);
     inp.addEventListener("keydown", (e) => { if (e.key === "Enter") inp.blur(); if (e.key === "Escape") { editing = null; S.refresh(); } });
-    setTimeout(() => inp.focus(), 0);
+    setTimeout(() => inp.focus({ preventScroll: true }), 0);
     return inp;
   }
 
@@ -196,16 +217,28 @@ export function renderClm() {
   }
 
   async function doExport() {
-    const html = buildClmHtml(weeks, { congName: store.congregation?.name || "", month: S.month, lang, name: pubName, pubs, ...clmPrefs() });
+    const html = buildClmHtml(weeks, { congName: store.congregation?.name || "", month: S.month, lang, name: pubName, pubs, ...(await clmPrefs()) });
     await exportPdf(html, `clm-${monthName(S.month, "en").replace(" ", "-").toLowerCase()}`, { landscape: true });
   }
   async function doExportWeek(w) {
-    const html = buildClmWeekHtml(w, { lang, name: pubName, pubs, ...clmPrefs() });
+    const html = buildClmWeekHtml(w, { lang, name: pubName, pubs, ...(await clmPrefs()) });
     await exportPdf(html, `clm-week-${w.date}`, { landscape: false });
   }
-  function clmPrefs() {
+  // Section icons: per-congregation override (meta.sheet.clmIcons) else the
+  // bundled defaults, embedded as data: URIs (the remote PDF backend can't
+  // fetch relative asset URLs). Missing assets resolve to "" → export still works.
+  async function clmPrefs() {
     const sheet = (store.get("meta") || {}).sheet || {};
-    return { tints: sheet.tints, notes: sheet.clmNotes, icons: sheet.clmIcons };
+    const icons = sheet.clmIcons || await loadDefaultIcons();
+    return { tints: sheet.tints, notes: sheet.clmNotes, icons };
+  }
+  async function loadDefaultIcons() {
+    const [treasures, ministry, living] = await Promise.all([
+      assetDataUri("assets/clm/treasures.jpg"),
+      assetDataUri("assets/clm/ministry.jpg"),
+      assetDataUri("assets/clm/living.jpg"),
+    ]);
+    return { treasures, ministry, living };
   }
 }
 

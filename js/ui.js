@@ -145,10 +145,13 @@ export function confirmDialog(message, { danger = true } = {}) {
 /* ---- Searchable combobox (assignee picker) ----------------------------- */
 // options: [{value, label, meta}]. Emits onSelect(value|null). `allowFree`
 // lets the user type an arbitrary value (e.g. visiting speaker names).
-export function combo({ options, value, placeholder = "", allowFree = false, onSelect }) {
+// The menu is appended to <body> with position:fixed while open, so no
+// ancestor scroller (.clm-scroll, .tbl-wrap, .modal, .content) can clip it;
+// it flips above the input when the viewport bottom is too close.
+export function combo({ options, value, placeholder = "", allowFree = false, autofocus = false, onSelect }) {
   const input = el("input", { class: "input", placeholder, value: labelFor(value) || "", autocomplete: "off" });
   const menu = el("div", { class: "combo-menu", style: { display: "none" } });
-  const wrap = el("div", { class: "combo" }, input, menu);
+  const wrap = el("div", { class: "combo" }, input);
   let hi = -1, filtered = options;
 
   function labelFor(v) { const o = options.find((x) => x.value === v); return o ? o.label : (allowFree ? v : ""); }
@@ -164,12 +167,34 @@ export function combo({ options, value, placeholder = "", allowFree = false, onS
     });
     if (!filtered.length && !allowFree) menu.append(el("div", { class: "combo-opt muted" }, "No matches"));
   }
-  function open() { render(input.value === labelFor(value) ? "" : input.value); menu.style.display = "block"; }
-  function closeMenu() { menu.style.display = "none"; }
+  function place() {
+    if (!input.isConnected) return closeMenu();
+    const r = input.getBoundingClientRect();
+    const below = window.innerHeight - r.bottom - 8, above = r.top - 8;
+    const need = Math.min(menu.scrollHeight, 260);
+    const up = below < need && above > below; // flip up when the bottom is tight
+    menu.style.maxHeight = `${Math.min(260, Math.max(80, up ? above : below))}px`;
+    menu.style.left = `${r.left}px`;
+    menu.style.width = `${r.width}px`;
+    menu.style.top = up ? "auto" : `${r.bottom + 4}px`;
+    menu.style.bottom = up ? `${window.innerHeight - r.top + 4}px` : "auto";
+  }
+  function show() {
+    if (!menu.isConnected) document.body.append(menu);
+    menu.style.display = "block"; place();
+    window.addEventListener("scroll", place, true);
+    window.addEventListener("resize", place);
+  }
+  function open() { render(input.value === labelFor(value) ? "" : input.value); show(); }
+  function closeMenu() {
+    menu.style.display = "none"; menu.remove();
+    window.removeEventListener("scroll", place, true);
+    window.removeEventListener("resize", place);
+  }
   function pick(v) { value = v; input.value = labelFor(v) || ""; closeMenu(); onSelect && onSelect(v); }
 
   input.addEventListener("focus", open);
-  input.addEventListener("input", () => { menu.style.display = "block"; render(input.value); });
+  input.addEventListener("input", () => { render(input.value); show(); });
   input.addEventListener("blur", () => setTimeout(() => {
     closeMenu();
     if (allowFree && input.value.trim() && !options.some((o) => o.label === input.value.trim())) { value = input.value.trim(); onSelect && onSelect(value); }
@@ -183,5 +208,6 @@ export function combo({ options, value, placeholder = "", allowFree = false, onS
     else if (e.key === "Escape") { closeMenu(); return; }
     opts.forEach((o, i) => o.classList.toggle("hi", i === hi));
   });
+  if (autofocus) setTimeout(() => input.focus({ preventScroll: true }), 0);
   return wrap;
 }

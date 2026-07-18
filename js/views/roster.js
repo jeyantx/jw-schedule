@@ -7,8 +7,8 @@
 import { store, uid } from "../store.js";
 import { getLang, t } from "../i18n.js";
 import { el, icon, toast, modal, combo, confirmDialog } from "../ui.js";
-import { S, inMonth, monthName, fmtDate } from "../state.js";
-import { kindFields, kindMeta, roleBoardHtml, fsmBoardHtml, weeklyCardHtml, displayName } from "../features/boards.js";
+import { S, inMonth, monthName, fmtDate, monthDates } from "../state.js";
+import { kindFields, kindMeetingDays, kindMeta, roleBoardHtml, fsmBoardHtml, weeklyCardHtml, displayName } from "../features/boards.js";
 import { exportPdf } from "../features/pdf.js";
 
 export function makeRoster(kind) {
@@ -21,6 +21,13 @@ export function makeRoster(kind) {
     const fields = kindFields(kind);
 
     const rows = store.get(kind).filter((r) => inMonth(r[dateField])).sort((a, b) => (a[dateField] || "").localeCompare(b[dateField] || ""));
+    // ghost rows: every meeting date of the month is laid out even when unsaved
+    const ghostDates = [...new Set(kindMeetingDays(kind).flatMap((wd) => monthDates(wd)))]
+      .filter((d) => !rows.some((r) => r[dateField] === d));
+    const lines = [
+      ...rows.map((r) => ({ date: r[dateField] || "", rec: r })),
+      ...ghostDates.map((d) => ({ date: d, rec: null })),
+    ].sort((a, b) => a.date.localeCompare(b.date));
 
     const display = (f, r) => {
       const v = r[f.key];
@@ -31,7 +38,14 @@ export function makeRoster(kind) {
     };
 
     const tbody = el("tbody");
-    rows.forEach((r) => {
+    lines.forEach(({ date, rec: r }) => {
+      if (!r) {
+        tbody.append(el("tr", { class: `ghost ${canEdit ? "row-click" : ""}`, onClick: canEdit ? () => openEditor(null, date) : null },
+          el("td", {}, fmtDate(date, lang)),
+          ...fields.map(() => el("td", { class: "muted" }, "—")),
+          el("td", { style: { whiteSpace: "nowrap" } }, canEdit ? icon("plus", 15) : "")));
+        return;
+      }
       tbody.append(el("tr", { class: canEdit ? "row-click" : "", onClick: canEdit ? () => openEditor(r) : null },
         el("td", {}, fmtDate(r[dateField], lang)),
         ...fields.map((f) => el("td", {}, display(f, r))),
@@ -40,7 +54,7 @@ export function makeRoster(kind) {
           canEdit ? icon("pencil", 15) : null)));
     });
 
-    const table = rows.length ? el("div", { class: "tbl-wrap" },
+    const table = lines.length ? el("div", { class: "tbl-wrap" },
       el("table", { class: "tbl" },
         el("thead", {}, el("tr", {}, el("th", {}, t("date")), ...fields.map((f) => el("th", {}, f.label)), el("th", {}, ""))),
         tbody))
@@ -66,10 +80,10 @@ export function makeRoster(kind) {
     }
 
     /* ---- editor modal ---- */
-    function openEditor(rec) {
+    function openEditor(rec, presetDate) {
       const isNew = !rec;
       const draft = rec ? JSON.parse(JSON.stringify(rec)) : { id: uid(kind[0]) };
-      const dateI = el("input", { class: "input", type: "date", value: draft[dateField] || monthFirst() });
+      const dateI = el("input", { class: "input", type: "date", value: draft[dateField] || presetDate || monthFirst() });
       const fieldEls = [el("div", { class: "field" }, el("label", {}, t("date")), dateI)];
 
       fields.forEach((f) => {

@@ -58,9 +58,12 @@ export const api = {
   getAllData: (id) => request("GET", `/congregations/${id}/data`),
   getData: (id, kind) => request("GET", `/congregations/${id}/data/${kind}`),
   putData: (id, kind, doc) => request("PUT", `/congregations/${id}/data/${kind}`, doc),
-  // PDF: returns a Blob
-  pdf: async (html, { landscape = true, format = "A4", filename = "schedule" } = {}) => {
-    const res = await request("POST", "/pdf", { html, landscape, format, filename }, { raw: true, timeout: 90000 });
+  // PDF: returns a Blob. marginMm (0..50) is applied evenly to all four sides
+  // by the backend; omitted → backend default (10mm).
+  pdf: async (html, { landscape = true, format = "A4", marginMm, filename = "schedule" } = {}) => {
+    const body = { html, landscape, format, filename };
+    if (marginMm != null) body.marginMm = marginMm;
+    const res = await request("POST", "/pdf", body, { raw: true, timeout: 90000 });
     return res.blob();
   },
 };

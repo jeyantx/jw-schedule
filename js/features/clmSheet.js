@@ -10,9 +10,9 @@ const isCbs = (p) => p.cbs === true || p.reader === true || readerId(p) != null;
 
 // Single week (WhatsApp reminder) — same design, no title row / notes.
 export const buildClmWeekHtml = (week, opts = {}) =>
-  buildClmHtml([week], { congName: "", month: new Date(week.date + "T00:00:00"), lang: opts.lang || "ta", ...opts, header: false, footer: false });
+  buildClmHtml([week], { congName: "", month: new Date(week.date + "T00:00:00"), lang: opts.lang || "ta", ...opts, header: false, footer: false, orientation: "portrait" });
 
-export function buildClmHtml(weeks, { congName, month, lang, name, pubs, notes, icons, tints, header, footer }) {
+export function buildClmHtml(weeks, { congName, month, lang, name, pubs, notes, icons, tints, header, footer, orientation }) {
   // Display name with Br./Sr. prefix when we can resolve gender; else raw name.
   const disp = (id) => {
     if (!id) return "";
@@ -30,7 +30,7 @@ export function buildClmHtml(weeks, { congName, month, lang, name, pubs, notes, 
       : `${congName} — Our Christian Life and Ministry Meeting Schedule`,
     month: monthName(month, lang),
     labels: lang === "ta" ? undefined : { chairman: "Chairman", prayer: "Prayer", reading: "Reading", note: "Note:" },
-    icons, tints, notes, header, footer,
+    icons, tints, notes, header, footer, orientation,
     weeks: sorted.map((w) => {
       const secs = w.sections || {};
       const livingParts = (secs.living || []).filter((p) => !isCbs(p));

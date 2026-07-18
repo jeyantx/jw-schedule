@@ -59,8 +59,14 @@
 export const noteHi = (s) => `<span class="note-hi">${esc(s)}</span>`;
 
 // Single-week fragment: same design, one week's card only, no title/notes.
+// Exported/printed portrait (WhatsApp reminder), so it fits the narrow page.
 export const renderClmWeek = (week, opts = {}) =>
-  renderClmSheet({ ...opts, weeks: [week], header: false, footer: false });
+  renderClmSheet({ ...opts, weeks: [week], header: false, footer: false, orientation: "portrait" });
+
+// A4 printable widths in CSS px @96dpi with the backend's default 10mm margins
+// (landscape 297mm, portrait 210mm, minus 2×10mm). Used to zoom-to-fit the
+// fixed-geometry table so the PDF has even margins instead of overflowing.
+const PRINTABLE = { landscape: 1040, portrait: 712 };
 
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
@@ -100,7 +106,12 @@ const LABELS = { chairman: "சேர்மன்", prayer: "ஜெபம்", r
 
 // --- CSS verbatim from the reference (day tints + table width injected) -----
 const CSS = `
-body{margin:0;background:#fff}
+body{margin:0;background:#fff;text-align:center}
+/* Print-fit: centre the fixed-geometry table and (in print only) scale it down
+   so it fills the A4 printable width with even margins — never touches the
+   table's own layout on screen. */
+.fit{display:inline-block;text-align:left}
+__FIT__
 table{border-collapse:separate;border-spacing:0;table-layout:fixed;width:__WIDTH__px}
 td,th{box-sizing:content-box;overflow:hidden;line-height:normal;white-space:normal;word-wrap:break-word;--day:#fff;--sec:#999;background:var(--day)}
 img{max-width:none;display:inline-block;vertical-align:top}
@@ -310,17 +321,24 @@ export function renderClmSheet(input) {
     }
   }
 
-  const css = CSS.replace("__WIDTH__", width).replace("__DAYS__", dayCss).replace("__SECS__", secCss);
+  // print-fit: A4 page hint (used by the offline browser-print fallback; the
+  // PDF backend ignores @page) + a print-only zoom that shrinks the table to
+  // the printable width so the PDF is centred with even margins.
+  const orientation = input.orientation === "portrait" ? "portrait" : "landscape";
+  const zoom = Math.min(1, PRINTABLE[orientation] / parseFloat(width));
+  const fit = `@page{size:A4 ${orientation};margin:10mm}\n` +
+              (zoom < 1 ? `@media print{.fit{zoom:${zoom.toFixed(4)}}}\n` : "");
+  const css = CSS.replace("__WIDTH__", width).replace("__DAYS__", dayCss).replace("__SECS__", secCss).replace("__FIT__", fit);
   return `<html><head><meta charset="UTF-8"><title>Schedule</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Tamil:wght@400;700&display=swap" rel="stylesheet">
 <style>${css}</style></head><body>
-<table>
+<div class="fit"><table>
 <colgroup>
 ${colgroup}
 </colgroup>
 <tbody>
 ${rows.join("\n")}
 </tbody>
-</table></body></html>`;
+</table></div></body></html>`;
 }

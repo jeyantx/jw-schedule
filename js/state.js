@@ -17,6 +17,18 @@ export function shiftMonth(n) {
 export const monthKey = (d = S.month) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 export const inMonth = (iso, d = S.month) => typeof iso === "string" && iso.startsWith(monthKey(d));
 
+// ISO dates of every occurrence of `weekday` (0=Sun..6=Sat) in the month.
+export function monthDates(weekday, d = S.month) {
+  const y = d.getFullYear(), m = d.getMonth(), out = [];
+  const dt = new Date(y, m, 1);
+  dt.setDate(1 + ((weekday - dt.getDay() + 7) % 7));
+  while (dt.getMonth() === m) {
+    out.push(`${y}-${String(m + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`);
+    dt.setDate(dt.getDate() + 7);
+  }
+  return out;
+}
+
 const MONTHS_EN = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const MONTHS_TA = ["ஜனவரி","பிப்ரவரி","மார்ச்","ஏப்ரல்","மே","ஜூன்","ஜூலை","ஆகஸ்ட்","செப்டம்பர்","அக்டோபர்","நவம்பர்","டிசம்பர்"];
 export const monthName = (d, lang) => `${(lang === "ta" ? MONTHS_TA : MONTHS_EN)[d.getMonth()]} ${d.getFullYear()}`;

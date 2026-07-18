@@ -31,11 +31,23 @@
 .clm-part .who { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .clm-week > *:last-child { border-bottom: none; }
 
-/* editable cells */
+/* ghost week — a midweek date with no saved record yet (UI-only) */
+.clm-week.ghost { border-style: dashed; background: transparent; cursor: pointer; }
+.clm-week.ghost .clm-week-head { background: transparent; color: var(--text-3); border-bottom-style: dashed; font-style: italic; }
+.clm-week.ghost .ghost-add { flex: 1; min-height: 120px; display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--text-3); font-weight: 600; font-size: var(--fs-sm); }
+.clm-week.ghost:hover, .clm-week.ghost:focus-visible { border-color: var(--accent); }
+.clm-week.ghost:hover .ghost-add, .clm-week.ghost:hover .clm-week-head { color: var(--accent); }
+
+/* editable cells — display span and swapped-in editor share the same 28px
+   footprint so entering/leaving edit mode never shifts the layout */
 .cell {
-  border: 1px dashed transparent; border-radius: var(--r-sm); padding: 4px 6px; min-height: 28px;
+  border: 1px dashed transparent; border-radius: var(--r-sm); padding: 3px 6px; min-height: 28px;
   cursor: pointer; transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
-  font-weight: 600; font-size: var(--fs-sm);
+  font-weight: 600; font-size: var(--fs-sm); line-height: 20px; display: block; box-sizing: border-box;
+}
+.clm-line .combo, .clm-part .combo { min-width: 0; }
+.clm-line .combo .input, .clm-part .combo .input {
+  height: 28px; width: 100%; padding: 3px 6px; font-size: var(--fs-sm); border-radius: var(--r-sm);
 }
 .cell:hover { background: var(--accent-soft); border-color: var(--accent); }
 .cell.empty { color: var(--text-3); font-weight: 500; font-style: italic; }

@@ -100,6 +100,22 @@ test("icons exist for every field icon used by the boards", () => {
     assert.ok(ICONS[k], `missing icon ${k}`);
 });
 
+test("print-fit @page: role/fsm landscape, card portrait, weekend portrait+compact", () => {
+  assert.ok(renderRoleBoard(roleCfg()).includes("@page{size:A4 landscape;margin:10mm}"));
+  const card = renderBoardCard({ kind: "av", title: "AV", icon: "speaker", theme: "light-1",
+    date: { label: "மே 6", iso: "2026-05-06" }, fields: [{ label: "x", value: "y" }] });
+  assert.ok(card.includes("@page{size:A4 portrait;margin:10mm}"));
+  const wk = renderDateBoard({ kind: "weekend", title: "W", icon: "tower", theme: "light-1",
+    orientation: "portrait", compact: true, columns: [{ key: "a", label: "A" }],
+    rows: [{ date: { label: "மே 3", iso: "2026-05-03" }, cells: { a: "x" } }] });
+  assert.ok(wk.includes("@page{size:A4 portrait;margin:10mm}"));
+  assert.ok(wk.includes('class="board compact"'));
+});
+
+test("boards centre horizontally (margin:0 auto) so the PDF has even margins", () => {
+  assert.ok(renderRoleBoard(roleCfg()).includes("margin:0 auto"));
+});
+
 test("notes + guideline render under the board", () => {
   const html = renderRoleBoard({ ...roleCfg(), notes: ["முதல்"], guideline: "வழிகாட்டுதல்" });
   assert.ok(html.includes("முதல்"));

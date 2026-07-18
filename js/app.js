@@ -188,15 +188,26 @@ function highlightNav(name) {
   const ml = document.getElementById("monthLabel"); if (ml) ml.textContent = monthName(S.month, getLang());
 }
 
+const SCROLLERS = ".content, .clm-scroll, .tbl-wrap"; // app scroll regions
+let lastView = null;
 function renderView(name) {
   const item = [].concat(...NAV.map((s) => s.items)).find((i) => i.name === name);
   // guard direct hash access to a tab the user can't see
   if (item && ((item.ownerOnly && !store.isOwner()) || (item.kind && !store.canViewKind(item.kind)))) {
     return mount(els.content, el("div", { class: "empty" }, icon("lock", 40), el("p", {}, t("viewOnly"))));
   }
+  // preserve scroll positions across S.refresh()/store re-renders of the SAME
+  // view (inline edits) so the page doesn't jump; navigation resets scroll.
+  const keep = name === lastView; lastView = name;
+  const saved = keep ? [...document.querySelectorAll(SCROLLERS)].map((n) => [n.scrollTop, n.scrollLeft]) : null;
+  const win = keep ? [window.scrollX, window.scrollY] : null;
   const fn = router.view(name);
   try { mount(els.content, fn()); }
   catch (e) { console.error(e); mount(els.content, el("div", { class: "empty" }, icon("alert", 40), el("p", {}, "Something went wrong rendering this view."))); }
+  if (saved) requestAnimationFrame(() => {
+    document.querySelectorAll(SCROLLERS).forEach((n, i) => { if (saved[i]) { n.scrollTop = saved[i][0]; n.scrollLeft = saved[i][1]; } });
+    window.scrollTo(win[0], win[1]);
+  });
   highlightNav(name);
   document.getElementById("monthLabel") && (document.getElementById("monthLabel").textContent = monthName(S.month, getLang()));
 }

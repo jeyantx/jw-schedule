@@ -6,10 +6,10 @@ import { api } from "../api.js";
 import { toast } from "../ui.js";
 import { t } from "../i18n.js";
 
-export async function exportPdf(html, filename = "schedule", { landscape = true } = {}) {
+export async function exportPdf(html, filename = "schedule", { landscape = true, marginMm = 10 } = {}) {
   toast(t("saving"));
   try {
-    const blob = await api.pdf(html, { landscape, filename });
+    const blob = await api.pdf(html, { landscape, marginMm, filename });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url; a.download = `${filename}.pdf`;

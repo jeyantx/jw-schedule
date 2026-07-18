@@ -23,6 +23,7 @@ const L = (ta, en) => (lang() === "ta" ? ta : en);
 
 export const sheetPrefs = () => ({
   theme: "light-1", cleaningFormat: "parts", attendantFormat: "2",
+  midweekDay: 3, weekendDay: 0, fsmDay: 6, // meeting weekdays (0=Sun..6=Sat)
   ...((store.get("meta") || {}).sheet || {}),
 });
 export function boardTheme(prefs = sheetPrefs()) {
@@ -83,6 +84,13 @@ export function kindFields(kind, prefs = sheetPrefs()) {
   }
   return [];
 }
+// ---- per-kind meeting weekdays (drive the ghost rows in the app views) ------
+// Which weekday(s) a kind meets on; DOM-free so it stays unit-testable.
+export function kindMeetingDays(kind, prefs = sheetPrefs()) {
+  const mid = prefs.midweekDay ?? 3, wkd = prefs.weekendDay ?? 0;
+  return { clm: [mid], weekend: [wkd], av: [mid, wkd], cleaning: [wkd], attendant: [wkd], fsm: [prefs.fsmDay ?? 6] }[kind] || [];
+}
+
 export const kindMeta = (kind) => ({
   av: { icon: "speaker", title: L("ஒலி / ஒளி அமைப்பு", "AUDIO / VIDEO") },
   cleaning: { icon: "sparkle", title: L("சுத்தம் செய்தல்", "CLEANING") },
@@ -138,20 +146,24 @@ export function fsmBoardHtml(records, { congName, month } = {}) {
   });
 }
 
-// Weekend → dates left, role columns top.
+// Weekend → dates left, role columns top. A4 PORTRAIT (per user request): the
+// public-talk column stays flexible + widest; date + the four person columns
+// are fixed and sized so single Tamil words never break mid-word on the narrow
+// page. Compact mode shrinks the font/padding so ~10 rows fit one page.
 export function weekendBoardHtml(records, { congName, month, notes } = {}) {
   const prefs = sheetPrefs();
   const meta = kindMeta("weekend");
   const recs = [...records].sort((a, b) => (a.date || "").localeCompare(b.date || ""));
   return renderDateBoard({
     kind: "weekend", theme: boardTheme(prefs), lang: lang(),
-    title: meta.title, icon: meta.icon, congName, month, dateWidth: 112,
+    title: meta.title, icon: meta.icon, congName, month,
+    orientation: "portrait", compact: true, dateWidth: 72,
     columns: [
-      { key: "chair", icon: "chair", label: L("சேர்மன்", "Chairman"), width: 155 },
+      { key: "chair", icon: "chair", label: L("சேர்மன்", "Chairman"), width: 92 },
       { key: "talk", icon: "talk", label: L("பொது பேச்சு", "Public Talk"), align: "left" },
-      { key: "speaker", icon: "mic", label: L("பேச்சாளர்", "Speaker"), width: 180, align: "left" },
-      { key: "cond", icon: "book", label: L("காவற்கோபுரம்", "Watchtower"), width: 145 },
-      { key: "reader", icon: "reader", label: L("வாசிப்பு", "Reader"), width: 130 },
+      { key: "speaker", icon: "mic", label: L("பேச்சாளர்", "Speaker"), width: 96, align: "left" },
+      { key: "cond", icon: "book", label: L("காவற்கோபுரம்", "Watchtower"), width: 92 },
+      { key: "reader", icon: "reader", label: L("வாசிப்பு", "Reader"), width: 92 },
     ],
     rows: recs.map((w) => ({ date: dateObj(w.date), cells: {
       chair: displayName(w.chairman),

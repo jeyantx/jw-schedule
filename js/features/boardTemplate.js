@@ -71,10 +71,15 @@ const iconHtml = (ic, size, cls) => !ic ? "" :
   (ICONS[ic] ? iconSvg(ic, size, cls) : `<img class="${cls}" src="${esc(imgSrc(ic))}" width="${size}" height="${size}" alt="">`);
 
 // ---- shared css -------------------------------------------------------------
-const baseCss = (T, width) => `
+// A4 printable widths (CSS px @96dpi, backend default 10mm margins): landscape
+// 297mm-20mm ≈ 1040px, portrait 210mm-20mm ≈ 712px. Board widths stay within
+// these so the PDF is centred with even margins (never wider → never clipped).
+export const PRINTABLE = { landscape: 1040, portrait: 712 };
+const baseCss = (T, width, orient = "landscape") => `
 *{margin:0;padding:0;box-sizing:border-box}
+@page{size:A4 ${orient};margin:10mm}
 body{background:#fff;font-family:"Noto Sans Tamil",Arial,sans-serif;color:${T.text};-webkit-print-color-adjust:exact;print-color-adjust:exact}
-.board{width:${width}px;background:${T.bg};border:2px solid ${T.frame};border-radius:14px;overflow:hidden;padding:0 0 10px}
+.board{width:${width}px;max-width:100%;margin:0 auto;background:${T.bg};border:2px solid ${T.frame};border-radius:14px;overflow:hidden;padding:0 0 10px}
 .band{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:15px 22px 12px;border-bottom:2.5px solid var(--accent);background:color-mix(in srgb,var(--accent) 5%,#fff)}
 .band .bt{display:inline-flex;align-items:center;gap:12px;color:var(--accent);font-size:16.5px;font-weight:700;letter-spacing:.1em}
 .band .bm{color:${T.muted};font-size:12.5px;font-weight:700;letter-spacing:.03em;text-align:right;line-height:1.45}
@@ -87,17 +92,25 @@ th{font-weight:700}
 tr.r td{border-bottom:1px solid ${T.grid};padding:12px var(--cpx);vertical-align:middle}
 tr.r.alt td{background:${T.zebra || "#f8fafb"}}
 tr.r:last-child td{border-bottom:none}
-.rl{display:flex;align-items:center;gap:10px;font-size:13.5px;font-weight:700;color:${T.text};padding:0 8px 0 22px;overflow-wrap:anywhere}
+.rl{display:flex;align-items:center;gap:10px;font-size:13.5px;font-weight:700;color:${T.text};padding:0 8px 0 22px;overflow-wrap:break-word;word-break:normal}
 .rl svg{color:${T.muted};flex:none}
-.dl{font-size:14px;font-weight:700;color:var(--accent);padding-left:22px;overflow-wrap:anywhere}
+.dl{font-size:14px;font-weight:700;color:var(--accent);padding-left:22px;overflow-wrap:break-word;word-break:normal}
 .dl .wd{display:block;font-size:10px;letter-spacing:.08em;color:${T.muted}}
-.cell{font-size:var(--cfs);font-weight:600;text-align:center;overflow-wrap:anywhere}
+.cell{font-size:var(--cfs);font-weight:600;text-align:center;overflow-wrap:break-word;word-break:normal}
 .cell .no{display:inline-block;min-width:22px;padding:1px 6px;margin-right:7px;border-radius:99px;background:color-mix(in srgb,var(--accent) 12%,#fff);color:var(--accent);font-size:12px;font-weight:700;text-align:center}
 .cell .hint{display:block;font-size:11px;color:${T.muted};font-weight:600;margin-top:1px}
 .foot{padding:12px 22px 2px;font-size:12px;color:${T.muted}}
 .foot b{color:${T.text}}
 .guide{display:flex;gap:8px;align-items:flex-start;margin-top:6px;font-style:italic}
 .note-hi{color:#b91c1c}
+/* compact: portrait boards with many columns (e.g. weekend) — smaller cells,
+   tighter padding, wrapping headers so nothing overflows on the narrow page */
+.board.compact table{--cfs:12px;--cpx:5px}
+.board.compact .ch{font-size:10px;padding:9px 5px 7px;letter-spacing:.02em}
+.board.compact .ch .in{flex-wrap:wrap;justify-content:center;gap:3px}
+.board.compact .dl{padding-left:8px;font-size:12.5px}
+.board.compact .dl .wd{font-size:9px}
+.board.compact .rl{padding-left:12px;font-size:12.5px;gap:7px}
 `;
 const WEEKDAYS = {
   ta: ["ஞாயிறு", "திங்கள்", "செவ்வாய்", "புதன்", "வியாழன்", "வெள்ளி", "சனி"],
@@ -139,7 +152,7 @@ const cellHtml = (c) => c && typeof c === "object"
 export function renderRoleBoard(cfg) {
   const T = resolveTheme(cfg.theme);
   const accent = cfg.accent || T.accents[cfg.kind] || T.frame;
-  const width = cfg.width || 1082;
+  const width = cfg.width || PRINTABLE.landscape;
   const leftW = cfg.leftWidth || 190;
   const dates = cfg.dates || [];
   const dense = dates.length > 6;
@@ -153,7 +166,7 @@ export function renderRoleBoard(cfg) {
     `<tr class="r${ri % 2 ? " alt" : ""}"><td><div class="rl">${iconHtml(r.icon, 18)}<span>${esc(r.label)}</span></div></td>` +
     dates.map((_, i) => `<td class="cell">${cellHtml((r.cells || [])[i])}</td>`).join("") + `</tr>`).join("");
   const table = `<table style="--accent:${accent};--cfs:${cfs};--cpx:${cpx}">${colgroup}${head}${body}</table>`;
-  return doc(baseCss(T, width),
+  return doc(baseCss(T, width, "landscape"),
     `<div class="board" style="--accent:${accent}">${bandHtml(cfg.icon, cfg.title, bandMeta(cfg))}${table}${footHtml(cfg.notes, cfg.guideline, cfg.labels)}</div>`);
 }
 
@@ -166,7 +179,8 @@ export function renderRoleBoard(cfg) {
 export function renderDateBoard(cfg) {
   const T = resolveTheme(cfg.theme);
   const accent = cfg.accent || T.accents[cfg.kind] || T.frame;
-  const width = cfg.width || 1082;
+  const orient = cfg.orientation === "portrait" ? "portrait" : "landscape";
+  const width = cfg.width || PRINTABLE[orient];
   const dateW = cfg.dateWidth || 120;
   const columns = cfg.columns || [];
   const showWd = cfg.showWeekday ?? mixedDays((cfg.rows || []).map((r) => r.date && r.date.iso));
@@ -178,8 +192,8 @@ export function renderDateBoard(cfg) {
     `<tr class="r${ri % 2 ? " alt" : ""}"><td><div class="dl">${showWd ? `<span class="wd">${esc(r.date.weekday ?? weekdayOf(r.date.iso, cfg.lang))}</span>` : ""}${esc(r.date.label)}</div></td>` +
     columns.map((c) => `<td class="cell"${c.align ? ` style="text-align:${c.align}"` : ""}>${cellHtml((r.cells || {})[c.key])}</td>`).join("") + `</tr>`).join("");
   const table = `<table style="--accent:${accent}">${colgroup}${head}${body}</table>`;
-  return doc(baseCss(T, width),
-    `<div class="board" style="--accent:${accent}">${bandHtml(cfg.icon, cfg.title, bandMeta(cfg))}${table}${footHtml(cfg.notes, cfg.guideline, cfg.labels)}</div>`);
+  return doc(baseCss(T, width, orient),
+    `<div class="board${cfg.compact ? " compact" : ""}" style="--accent:${accent}">${bandHtml(cfg.icon, cfg.title, bandMeta(cfg))}${table}${footHtml(cfg.notes, cfg.guideline, cfg.labels)}</div>`);
 }
 
 // ---- weekly card (WhatsApp reminder) ----------------------------------------
@@ -196,6 +210,6 @@ export function renderBoardCard(cfg) {
   const dateLine = `<tr><td colspan="2" style="padding:10px 22px 8px;border-bottom:1.5px solid ${T.grid}">` +
     `<span style="display:inline-flex;align-items:center;gap:8px;font-weight:700;font-size:15px;color:var(--accent)">${iconSvg("cal", 16)}${esc((cfg.date || {}).label)}</span></td></tr>`;
   const table = `<table style="--accent:${accent}">${dateLine}${rows}</table>`;
-  return doc(baseCss(T, width),
+  return doc(baseCss(T, width, "portrait"),
     `<div class="board" style="--accent:${accent}">${bandHtml(cfg.icon, cfg.title, bandMeta(cfg))}${table}${footHtml(cfg.notes, cfg.guideline, cfg.labels)}</div>`);
 }

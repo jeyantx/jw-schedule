@@ -96,3 +96,28 @@ test("kindMeta covers every schedule", () => {
     assert.ok(kindMeta(k).icon, k);
   }
 });
+
+test("kindMeetingDays: defaults + meta.sheet overrides (DOM-free)", async () => {
+  const { kindMeetingDays } = await import("../js/features/boards.js");
+  store.docs.meta = {};
+  assert.deepEqual(kindMeetingDays("clm"), [3]);
+  assert.deepEqual(kindMeetingDays("weekend"), [0]);
+  assert.deepEqual(kindMeetingDays("av"), [3, 0]);
+  assert.deepEqual(kindMeetingDays("cleaning"), [0]);
+  assert.deepEqual(kindMeetingDays("attendant"), [0]);
+  assert.deepEqual(kindMeetingDays("fsm"), [6]);
+  assert.deepEqual(kindMeetingDays("nope"), []);
+  store.docs.meta = { sheet: { midweekDay: 2, weekendDay: 6, fsmDay: 0 } };
+  assert.deepEqual(kindMeetingDays("clm"), [2]);
+  assert.deepEqual(kindMeetingDays("av"), [2, 6]);
+  assert.deepEqual(kindMeetingDays("fsm"), [0]);
+  store.docs.meta = {};
+});
+
+test("monthDates: all weekday occurrences of a month as ISO dates", async () => {
+  const { monthDates } = await import("../js/state.js");
+  // July 2026: Wednesdays are 1, 8, 15, 22, 29; Sundays 5, 12, 19, 26
+  assert.deepEqual(monthDates(3, new Date(2026, 6, 1)), ["2026-07-01", "2026-07-08", "2026-07-15", "2026-07-22", "2026-07-29"]);
+  assert.deepEqual(monthDates(0, new Date(2026, 6, 1)), ["2026-07-05", "2026-07-12", "2026-07-19", "2026-07-26"]);
+  assert.deepEqual(monthDates(6, new Date(2026, 1, 1)), ["2026-02-07", "2026-02-14", "2026-02-21", "2026-02-28"]);
+});
