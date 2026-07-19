@@ -11,10 +11,10 @@
 // Each apply chip carries a role suffix: .m = student (assignee), .a = assistant.
 // ============================================================================
 import { store } from "../store.js";
-import { getLang, getContentLang, t } from "../i18n.js";
+import { getLang, t } from "../i18n.js";
 import { el, icon } from "../ui.js";
 import { S } from "../state.js";
-import { pubLabel, groupLabel } from "../features/boards.js";
+import { pubLabel, groupLabel, contentLangFor } from "../features/boards.js";
 
 const MONTHS_EN = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const MONTHS_TA = ["ஜன", "பிப்", "மார்", "ஏப்", "மே", "ஜூன்", "ஜூலை", "ஆக", "செப்", "அக்", "நவ", "டிச"];
@@ -41,8 +41,8 @@ export function portionMatrix(year, clm = store.get("clm")) {
 }
 
 export function renderPortions() {
-  const lang = getLang();          // app chrome
-  const clang = getContentLang();  // publisher / group names (Tamil in mixed)
+  const lang = getLang();               // app chrome
+  const clang = contentLangFor("clm");  // publisher / group names — the midweek matrix follows the CLM override
   const months = lang === "ta" ? MONTHS_TA : MONTHS_EN;
   const L = (ta, en) => (lang === "ta" ? ta : en);
 

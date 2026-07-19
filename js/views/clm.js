@@ -5,10 +5,10 @@
 import { store, uid } from "../store.js";
 import { api } from "../api.js";
 import { CLM_SECTIONS, ROLES } from "../config.js";
-import { getLang, getContentLang, t, tc } from "../i18n.js";
+import { getLang, t, tc } from "../i18n.js";
 import { el, icon, toast, combo, confirmDialog, drawer, modal } from "../ui.js";
 import { S, inMonth, monthName, fmtDate, monthDates } from "../state.js";
-import { kindMeetingDays, pubLabel } from "../features/boards.js";
+import { kindMeetingDays, pubLabel, contentLangFor } from "../features/boards.js";
 import { missingSince, recentRepeats, statsFor, collectAssignments } from "../features/intelligence.js";
 import { fetchWeekImages, matchWeekImage, fetchMonthPrograms, fetchWeekProgram, matchWeek, pendingWeekDates, workbookMonthPath } from "../features/wol.js";
 import { buildClmHtml, buildClmWeekHtml } from "../features/clmSheet.js";
@@ -72,8 +72,8 @@ function setPath(obj, path, val) {
 }
 
 export function renderClm() {
-  const lang = getLang();          // app chrome (buttons, drawers, toasts, editor)
-  const clang = getContentLang();  // schedule content — week cards + exported sheet
+  const lang = getLang();               // app chrome (buttons, drawers, toasts, editor)
+  const clang = contentLangFor("clm");  // schedule content — week cards + exported sheet (per-schedule override)
   const canEdit = store.canEditKind("clm");
   const weeks = store.get("clm").filter((w) => inMonth(w.date)).sort((a, b) => (a.date || "").localeCompare(b.date || ""));
   const pubs = store.get("publishers");
@@ -509,14 +509,14 @@ export function renderClm() {
     exportMenu({
       getHtml: async () => buildClmHtml(await embedWeekImages(weeks), { congName: store.congregation?.name || "", month: S.month, lang: clang, name: pubName, pubs, ...(await clmPrefs()) }),
       filename: `clm-${monthName(S.month, "en").replace(" ", "-").toLowerCase()}`,
-      landscape: true, title: `${t("clm")} — ${monthName(S.month, lang)}`,
+      landscape: true, contentWidth: clmSheetWidth, title: `${t("clm")} — ${monthName(S.month, lang)}`,
     });
   }
   function doExportWeek(w) {
     exportMenu({
       getHtml: async () => buildClmWeekHtml((await embedWeekImages([w]))[0], { lang: clang, name: pubName, pubs, ...(await clmPrefs()) }),
       filename: `clm-week-${w.date}`,
-      landscape: false, title: `${t("clm")} — ${fmtDate(w.date, lang)}`,
+      landscape: false, contentWidth: clmSheetWidth, title: `${t("clm")} — ${fmtDate(w.date, lang)}`,
     });
   }
   // Section icons: per-congregation override (meta.sheet.clmIcons) else the
@@ -808,6 +808,16 @@ export function renderClm() {
 
 /* ---- helpers ------------------------------------------------------------ */
 const clone = (o) => JSON.parse(JSON.stringify(o));
+
+// The CLM sheet table is fixed-geometry but its total width varies with the
+// number of weeks; clmTemplate emits it as `table{…;width:NNNpx}`. Parse that
+// out of the built html so image export can tight-crop + 2×-sharpen at the
+// sheet's real width (a `function` declaration → hoisted, TDZ-safe when passed
+// as exportMenu's contentWidth). Falls to undefined → legacy image width.
+function clmSheetWidth(html) {
+  const m = /table\{[^}]*?width:([\d.]+)px/.exec(html || "");
+  return m ? parseFloat(m[1]) : undefined;
+}
 
 // Mon–Sun calendar-week key for an ISO date ("YYYY-MM-DD" of that week's Monday).
 // Two dates in the same week share a key. Pure + exported → unit-tested; used to

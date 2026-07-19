@@ -19,9 +19,17 @@ import { fmtDate } from "../state.js";
 import { renderRoleBoard, renderDateBoard, renderBoardCard, resolveTheme } from "./boardTemplate.js";
 
 // Boards are SCHEDULE CONTENT, so they follow the content language (Tamil in
-// "mixed" mode even though the app chrome is English).
-const lang = () => getContentLang();
-const L = (ta, en) => (lang() === "ta" ? ta : en);
+// "mixed" mode even though the app chrome is English) — each builder resolves
+// its OWN kind through contentLangFor so one schedule can override another.
+//
+// Per-schedule content-language override: meta.sheet.langOverrides = { clm:
+// "ta"|"en", weekend: …, av/cleaning/fsm/attendant: … }. Missing/"" → inherit
+// the app-wide content language. Views + exports resolve THEIR kind through
+// this so one schedule can print Tamil while another prints English.
+export function contentLangFor(kind) {
+  const o = (sheetPrefs().langOverrides || {})[kind];
+  return o === "ta" || o === "en" ? o : getContentLang();
+}
 
 export const sheetPrefs = () => ({
   theme: "light-1", cleaningFormat: "parts", attendantFormat: "2",
@@ -55,10 +63,10 @@ export function displayName(idOrText, pubs = store.get("publishers"), lang = get
   if (/^(Br|Sr)\./.test(raw)) return raw;
   return `${p.gender === "sister" ? "Sr." : "Br."} ${raw}`;
 }
-const groupName = (id) => { const g = store.get("groups").find((x) => x.id === id); return g ? groupLabel(g) : (id || ""); };
-const shortDate = (iso) => fmtDate(iso, lang()).replace(/,\s*\d{4}$/, "");
-const dateObj = (iso) => ({ label: shortDate(iso), iso });
-const fullDate = (iso) => ({ label: fmtDate(iso, lang()), iso });
+const groupName = (id, lng = getContentLang()) => { const g = store.get("groups").find((x) => x.id === id); return g ? groupLabel(g, lng) : (id || ""); };
+const shortDate = (iso, lng = getContentLang()) => fmtDate(iso, lng).replace(/,\s*\d{4}$/, "");
+const dateObj = (iso, lng = getContentLang()) => ({ label: shortDate(iso, lng), iso });
+const fullDate = (iso, lng = getContentLang()) => ({ label: fmtDate(iso, lng), iso });
 const guideline = (prefs, kind) => ((prefs.guidelines || {})[kind] || "").trim() || undefined;
 
 // ---- per-kind field definitions (drive BOTH the view editors and the boards) --
@@ -109,17 +117,20 @@ export function kindMeetingDays(kind, prefs = sheetPrefs()) {
   return { clm: [mid], weekend: [wkd], av: [mid, wkd], cleaning: [wkd], attendant: [wkd], fsm: [prefs.fsmDay ?? 6] }[kind] || [];
 }
 
-export const kindMeta = (kind) => ({
-  av: { icon: "speaker", title: L("ஒலி / ஒளி அமைப்பு", "AUDIO / VIDEO") },
-  cleaning: { icon: "sparkle", title: L("சுத்தம் செய்தல்", "CLEANING") },
-  attendant: { icon: "users", title: L("வரவேற்பாளர்", "ATTENDANTS") },
-  fsm: { icon: "home", title: L("வெளி ஊழியக் கூட்டம்", "FIELD SERVICE MEETING") },
-  weekend: { icon: "tower", title: L("வார இறுதி கூட்டம்", "WEEKEND MEETING") },
-}[kind]);
+export const kindMeta = (kind, lng = getContentLang()) => {
+  const Lk = (ta, en) => (lng === "ta" ? ta : en);
+  return {
+    av: { icon: "speaker", title: Lk("ஒலி / ஒளி அமைப்பு", "AUDIO / VIDEO") },
+    cleaning: { icon: "sparkle", title: Lk("சுத்தம் செய்தல்", "CLEANING") },
+    attendant: { icon: "users", title: Lk("வரவேற்பாளர்", "ATTENDANTS") },
+    fsm: { icon: "home", title: Lk("வெளி ஊழியக் கூட்டம்", "FIELD SERVICE MEETING") },
+    weekend: { icon: "tower", title: Lk("வார இறுதி கூட்டம்", "WEEKEND MEETING") },
+  }[kind];
+};
 
-const fieldValue = (kind, rec, f) => {
-  if (f.type === "person") return displayName(rec[f.key]);
-  if (f.type === "group") return groupName(rec[f.key]);
+const fieldValue = (kind, rec, f, lng = getContentLang()) => {
+  if (f.type === "person") return displayName(rec[f.key], undefined, lng);
+  if (f.type === "group") return groupName(rec[f.key], lng);
   if (f.type === "check") return rec[f.key] ? "Zoom" : "";
   return rec[f.key] || "";
 };
@@ -128,16 +139,17 @@ const fieldValue = (kind, rec, f) => {
 // AV / Cleaning / Attendants → roles left, dates top.
 export function roleBoardHtml(kind, records, { congName, month } = {}) {
   const prefs = sheetPrefs();
-  const meta = kindMeta(kind);
+  const clang = contentLangFor(kind); // this schedule's content language
+  const meta = kindMeta(kind, clang);
   const dateField = kind === "cleaning" ? "weekOf" : "date";
   const recs = [...records].sort((a, b) => (a[dateField] || "").localeCompare(b[dateField] || ""));
-  const fields = kindFields(kind, prefs).filter((f) => f.type !== "check");
+  const fields = kindFields(kind, prefs, clang).filter((f) => f.type !== "check");
   return renderRoleBoard({
-    kind, theme: boardTheme(prefs), lang: lang(),
+    kind, theme: boardTheme(prefs), lang: clang,
     title: meta.title, icon: meta.icon,
     congName, month,
-    dates: recs.map((r) => dateObj(r[dateField])),
-    rows: fields.map((f) => ({ icon: f.icon, label: f.label, cells: recs.map((r) => fieldValue(kind, r, f)) })),
+    dates: recs.map((r) => dateObj(r[dateField], clang)),
+    rows: fields.map((f) => ({ icon: f.icon, label: f.label, cells: recs.map((r) => fieldValue(kind, r, f, clang)) })),
     notes: prefs.notes?.[kind], guideline: guideline(prefs, kind),
   });
 }
@@ -145,20 +157,22 @@ export function roleBoardHtml(kind, records, { congName, month } = {}) {
 // FSM → dates left, role columns top.
 export function fsmBoardHtml(records, { congName, month } = {}) {
   const prefs = sheetPrefs();
-  const meta = kindMeta("fsm");
+  const clang = contentLangFor("fsm");
+  const Lc = (ta, en) => (clang === "ta" ? ta : en);
+  const meta = kindMeta("fsm", clang);
   const recs = [...records].sort((a, b) => (a.date || "").localeCompare(b.date || ""));
   return renderDateBoard({
-    kind: "fsm", theme: boardTheme(prefs), lang: lang(),
+    kind: "fsm", theme: boardTheme(prefs), lang: clang,
     title: meta.title, icon: meta.icon, congName, month, dateWidth: 112,
     columns: [
-      { key: "time", icon: "clock", label: L("நேரம்", "Time"), width: 140 },
-      { key: "loc", icon: "pin", label: L("கூட்ட இடம்", "Meeting Location"), align: "left" },
-      { key: "field", icon: "home", label: L("வெளி ஊழியப் பகுதி", "Field Territory"), align: "left" },
-      { key: "conductor", icon: "chair", label: L("நடத்துபவர்", "Conductor"), width: 180 },
+      { key: "time", icon: "clock", label: Lc("நேரம்", "Time"), width: 140 },
+      { key: "loc", icon: "pin", label: Lc("கூட்ட இடம்", "Meeting Location"), align: "left" },
+      { key: "field", icon: "home", label: Lc("வெளி ஊழியப் பகுதி", "Field Territory"), align: "left" },
+      { key: "conductor", icon: "chair", label: Lc("நடத்துபவர்", "Conductor"), width: 180 },
     ],
-    rows: recs.map((r) => ({ date: dateObj(r.date), cells: {
+    rows: recs.map((r) => ({ date: dateObj(r.date, clang), cells: {
       time: r.time || "", loc: { text: r.loc || "", hint: r.zoom ? "+ Zoom" : "" },
-      field: r.field || "", conductor: displayName(r.conductor),
+      field: r.field || "", conductor: displayName(r.conductor, undefined, clang),
     } })),
     guideline: guideline(prefs, "fsm"),
   });
@@ -173,28 +187,30 @@ export function fsmBoardHtml(records, { congName, month } = {}) {
 // narrow portrait/compact variant.
 export function weekendBoardHtml(records, { congName, month, notes, landscape = true } = {}) {
   const prefs = sheetPrefs();
-  const meta = kindMeta("weekend");
+  const clang = contentLangFor("weekend");
+  const Lc = (ta, en) => (clang === "ta" ? ta : en);
+  const meta = kindMeta("weekend", clang);
   const recs = [...records].sort((a, b) => (a.date || "").localeCompare(b.date || ""));
   const personW = landscape ? 154 : 114;
   return renderDateBoard({
-    kind: "weekend", theme: boardTheme(prefs), lang: lang(),
+    kind: "weekend", theme: boardTheme(prefs), lang: clang,
     title: meta.title, icon: meta.icon, congName, month,
     orientation: landscape ? "landscape" : "portrait", compact: !landscape,
     // 126px fits the widest Tamil short date ("செப்டம்பர் 28" = 102px at 14px)
     // after the 22px .dl indent, so date labels never wrap either
     dateWidth: landscape ? 126 : 72,
     columns: [
-      { key: "chair", icon: "chair", label: L("சேர்மன்", "Chairman"), width: personW },
-      { key: "talk", icon: "talk", label: L("பொது பேச்சு", "Public Talk"), align: "left" },
-      { key: "speaker", icon: "mic", label: L("பேச்சாளர்", "Speaker"), width: personW, align: "left" },
-      { key: "cond", icon: "book", label: L("காவற்கோபுரம்", "Watchtower"), width: personW },
-      { key: "reader", icon: "reader", label: L("வாசிப்பு", "Reader"), width: personW },
+      { key: "chair", icon: "chair", label: Lc("சேர்மன்", "Chairman"), width: personW },
+      { key: "talk", icon: "talk", label: Lc("பொது பேச்சு", "Public Talk"), align: "left" },
+      { key: "speaker", icon: "mic", label: Lc("பேச்சாளர்", "Speaker"), width: personW, align: "left" },
+      { key: "cond", icon: "book", label: Lc("காவற்கோபுரம்", "Watchtower"), width: personW },
+      { key: "reader", icon: "reader", label: Lc("வாசிப்பு", "Reader"), width: personW },
     ],
-    rows: recs.map((w) => ({ date: dateObj(w.date), cells: {
-      chair: displayName(w.chairman),
+    rows: recs.map((w) => ({ date: dateObj(w.date, clang), cells: {
+      chair: displayName(w.chairman, undefined, clang),
       talk: { no: w.talk?.number ?? null, text: w.talk?.theme || "" },
-      speaker: { text: displayName(w.talk?.speaker), hint: w.talk?.speakerCong || "" },
-      cond: displayName(w.wt?.conductor), reader: displayName(w.wt?.reader),
+      speaker: { text: displayName(w.talk?.speaker, undefined, clang), hint: w.talk?.speakerCong || "" },
+      cond: displayName(w.wt?.conductor, undefined, clang), reader: displayName(w.wt?.reader, undefined, clang),
     } })),
     notes, guideline: guideline(prefs, "weekend"),
   });
@@ -203,27 +219,29 @@ export function weekendBoardHtml(records, { congName, month, notes, landscape = 
 // ---- weekly cards (WhatsApp) --------------------------------------------------
 export function weeklyCardHtml(kind, rec) {
   const prefs = sheetPrefs();
-  const meta = kindMeta(kind);
+  const clang = contentLangFor(kind);
+  const Lc = (ta, en) => (clang === "ta" ? ta : en);
+  const meta = kindMeta(kind, clang);
   const dateField = kind === "cleaning" ? "weekOf" : "date";
   let fields;
   if (kind === "weekend") {
     fields = [
-      { icon: "chair", label: L("சேர்மன்", "Chairman"), value: displayName(rec.chairman) },
-      { icon: "talk", label: L("பொது பேச்சு", "Public Talk"), value: `${rec.talk?.number ? rec.talk.number + ". " : ""}${rec.talk?.theme || ""}` },
-      { icon: "mic", label: L("பேச்சாளர்", "Speaker"), value: displayName(rec.talk?.speaker) + (rec.talk?.speakerCong ? ` (${rec.talk.speakerCong})` : "") },
-      { icon: "book", label: L("காவற்கோபுரம்", "Watchtower"), value: displayName(rec.wt?.conductor) },
-      { icon: "reader", label: L("வாசிப்பு", "Reader"), value: displayName(rec.wt?.reader) },
+      { icon: "chair", label: Lc("சேர்மன்", "Chairman"), value: displayName(rec.chairman, undefined, clang) },
+      { icon: "talk", label: Lc("பொது பேச்சு", "Public Talk"), value: `${rec.talk?.number ? rec.talk.number + ". " : ""}${rec.talk?.theme || ""}` },
+      { icon: "mic", label: Lc("பேச்சாளர்", "Speaker"), value: displayName(rec.talk?.speaker, undefined, clang) + (rec.talk?.speakerCong ? ` (${rec.talk.speakerCong})` : "") },
+      { icon: "book", label: Lc("காவற்கோபுரம்", "Watchtower"), value: displayName(rec.wt?.conductor, undefined, clang) },
+      { icon: "reader", label: Lc("வாசிப்பு", "Reader"), value: displayName(rec.wt?.reader, undefined, clang) },
     ];
   } else if (kind === "fsm") {
-    fields = kindFields("fsm", prefs).filter((f) => f.type !== "check")
-      .map((f) => ({ icon: f.icon, label: f.label, value: f.key === "loc" ? (rec.loc || "") + (rec.zoom ? " + Zoom" : "") : fieldValue(kind, rec, f) }));
+    fields = kindFields("fsm", prefs, clang).filter((f) => f.type !== "check")
+      .map((f) => ({ icon: f.icon, label: f.label, value: f.key === "loc" ? (rec.loc || "") + (rec.zoom ? " + Zoom" : "") : fieldValue(kind, rec, f, clang) }));
   } else {
-    fields = kindFields(kind, prefs).map((f) => ({ icon: f.icon, label: f.label, value: fieldValue(kind, rec, f) }));
+    fields = kindFields(kind, prefs, clang).map((f) => ({ icon: f.icon, label: f.label, value: fieldValue(kind, rec, f, clang) }));
   }
   return renderBoardCard({
-    kind, theme: boardTheme(prefs), lang: lang(),
+    kind, theme: boardTheme(prefs), lang: clang,
     title: meta.title, icon: meta.icon,
-    date: fullDate(rec[dateField]),
+    date: fullDate(rec[dateField], clang),
     fields: fields.filter((f) => f.value),
     guideline: undefined,
   });

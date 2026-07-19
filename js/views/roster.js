@@ -5,21 +5,22 @@
 // always agree (including the congregation's cleaning/attendant format).
 // ============================================================================
 import { store, uid } from "../store.js";
-import { getLang, getContentLang, t, tc } from "../i18n.js";
+import { getLang, t, tc } from "../i18n.js";
 import { el, icon, toast, modal, combo, confirmDialog } from "../ui.js";
 import { S, inMonth, monthName, fmtDate, monthDates } from "../state.js";
-import { kindFields, kindMeetingDays, kindMeta, roleBoardHtml, fsmBoardHtml, weeklyCardHtml, displayName, groupLabel, pubLabel } from "../features/boards.js";
+import { kindFields, kindMeetingDays, kindMeta, roleBoardHtml, fsmBoardHtml, weeklyCardHtml, displayName, groupLabel, pubLabel, contentLangFor } from "../features/boards.js";
+import { PRINTABLE } from "../features/boardTemplate.js";
 import { exportMenu } from "../features/pdf.js";
 
 export function makeRoster(kind) {
   return function renderRoster() {
-    const lang = getLang();          // app chrome
-    const clang = getContentLang();  // schedule table + exports (Tamil in mixed)
+    const lang = getLang();               // app chrome
+    const clang = contentLangFor(kind);   // schedule table + exports (per-schedule override → Tamil in mixed)
     const canEdit = store.canEditKind(kind);
     const pubs = store.get("publishers");
     const groups = store.get("groups");
     const dateField = kind === "cleaning" ? "weekOf" : "date";
-    const fields = kindFields(kind); // table columns → content language (default)
+    const fields = kindFields(kind, undefined, clang); // table columns → this schedule's content language
 
     const rows = store.get(kind).filter((r) => inMonth(r[dateField])).sort((a, b) => (a[dateField] || "").localeCompare(b[dateField] || ""));
     // ghost rows: every meeting date of the month is laid out even when unsaved
@@ -57,7 +58,7 @@ export function makeRoster(kind) {
 
     const table = lines.length ? el("div", { class: "tbl-wrap" },
       el("table", { class: "tbl" },
-        el("thead", {}, el("tr", {}, el("th", {}, tc("date")), ...fields.map((f) => el("th", {}, f.label)), el("th", {}, ""))),
+        el("thead", {}, el("tr", {}, el("th", {}, clang === "ta" ? "தேதி" : "Date"), ...fields.map((f) => el("th", {}, f.label)), el("th", {}, ""))),
         tbody))
       : el("div", { class: "empty" }, icon(kind === "cleaning" ? "broom" : kind === "av" ? "volume" : kind === "fsm" ? "briefcase" : "door", 40),
           el("p", {}, `${monthName(S.month, lang)}`), canEdit ? el("p", { class: "hint" }, `${t("add")} ↑`) : null);
@@ -76,14 +77,14 @@ export function makeRoster(kind) {
       exportMenu({
         getHtml: () => (kind === "fsm" ? fsmBoardHtml(rows, opts) : roleBoardHtml(kind, rows, opts)),
         filename: `${kind}-${monthName(S.month, "en").replace(" ", "-").toLowerCase()}`,
-        landscape: true, title: `${t(kind)} — ${monthName(S.month, lang)}`,
+        landscape: true, contentWidth: PRINTABLE.landscape, title: `${t(kind)} — ${monthName(S.month, lang)}`,
       });
     }
     function openWeekMenu(r) {
       exportMenu({
         getHtml: () => weeklyCardHtml(kind, r),
         filename: `${kind}-week-${r[dateField]}`,
-        landscape: false, title: `${t(kind)} — ${fmtDate(r[dateField], lang)}`,
+        landscape: false, contentWidth: 420, title: `${t(kind)} — ${fmtDate(r[dateField], lang)}`,
       });
     }
 

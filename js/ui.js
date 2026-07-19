@@ -187,7 +187,7 @@ export function combo({ options, value, placeholder = "", allowFree = false, aut
     if (value) menu.append(el("div", { class: "combo-opt", onmousedown: (e) => { e.preventDefault(); pick(null); } }, "✕ ", (placeholder || "Clear")));
     filtered.slice(0, 50).forEach((o, i) => {
       menu.append(el("div", { class: "combo-opt", dataset: { i }, onmousedown: (e) => { e.preventDefault(); pick(o.value); } },
-        el("span", {}, o.label), o.meta ? el("span", { class: "g" }, o.meta) : null));
+        el("span", {}, o.label), o.meta ? el("span", { class: "g", title: "கடைசி நியமனம் · இந்த ஆண்டு எண்ணிக்கை / Last assigned · count this year" }, o.meta) : null));
     });
     if (!filtered.length && !allowFree) menu.append(el("div", { class: "combo-opt muted" }, "No matches"));
   }

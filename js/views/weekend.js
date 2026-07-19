@@ -2,15 +2,16 @@
 // WEEKEND — Public Talk (own or visiting speaker) + Watchtower study.
 // ============================================================================
 import { store, uid } from "../store.js";
-import { getLang, getContentLang, t, tc } from "../i18n.js";
+import { getLang, t, tc } from "../i18n.js";
 import { el, icon, toast, modal, combo, confirmDialog } from "../ui.js";
 import { S, monthName, monthRangeLabel, fmtDate, monthDates } from "../state.js";
-import { weekendBoardHtml, weeklyCardHtml, kindMeetingDays, pubLabel, sheetPrefs } from "../features/boards.js";
+import { weekendBoardHtml, weeklyCardHtml, kindMeetingDays, pubLabel, sheetPrefs, contentLangFor } from "../features/boards.js";
+import { PRINTABLE } from "../features/boardTemplate.js";
 import { exportMenu } from "../features/pdf.js";
 
 export function renderWeekend() {
-  const lang = getLang();          // app chrome
-  const clang = getContentLang();  // schedule table + exports (Tamil in mixed)
+  const lang = getLang();                  // app chrome
+  const clang = contentLangFor("weekend"); // schedule table + exports (per-schedule override → Tamil in mixed)
   const canEdit = store.canEditKind("weekend");
   const pubs = store.get("publishers");
   const pubName = (id) => { const p = pubs.find((x) => x.id === id); return p ? pubLabel(p, clang) : (id || ""); };
@@ -59,15 +60,15 @@ export function renderWeekend() {
       el("td", { class: "ta" }, w.wt?.conductor ? pubName(w.wt.conductor) : "—"),
       el("td", { class: "ta" }, w.wt?.reader ? pubName(w.wt.reader) : "—"),
       el("td", { style: { whiteSpace: "nowrap" } },
-        el("button", { class: "btn btn-icon", title: lang === "ta" ? "வார அட்டை (WhatsApp)" : "Weekly card", onClick: (e) => { e.stopPropagation(); exportMenu({ getHtml: () => weeklyCardHtml("weekend", w), filename: `weekend-week-${w.date}`, landscape: false, title: `${t("weekend")} — ${fmtDate(w.date, lang)}` }); } }, icon("share", 14)),
+        el("button", { class: "btn btn-icon", title: lang === "ta" ? "வார அட்டை (WhatsApp)" : "Weekly card", onClick: (e) => { e.stopPropagation(); exportMenu({ getHtml: () => weeklyCardHtml("weekend", w), filename: `weekend-week-${w.date}`, landscape: false, contentWidth: 420, title: `${t("weekend")} — ${fmtDate(w.date, lang)}` }); } }, icon("share", 14)),
         canEdit ? icon("pencil", 15) : null)));
   });
 
   const table = lines.length ? el("div", { class: "tbl-wrap" },
     el("table", { class: "tbl" }, el("thead", {}, el("tr", {},
-      el("th", {}, tc("date")), el("th", {}, clang === "ta" ? "தலைப்பு" : "Public Talk"),
+      el("th", {}, clang === "ta" ? "தேதி" : "Date"), el("th", {}, clang === "ta" ? "தலைப்பு" : "Public Talk"),
       el("th", {}, clang === "ta" ? "பேச்சாளர்" : "Speaker"),
-      el("th", {}, clang === "ta" ? "நடத்துபவர்" : "WT Conductor"), el("th", {}, tc("reader")), el("th", {}, ""))), tbody))
+      el("th", {}, clang === "ta" ? "நடத்துபவர்" : "WT Conductor"), el("th", {}, clang === "ta" ? "வாசிப்பாளர்" : "Reader"), el("th", {}, ""))), tbody))
     : el("div", { class: "empty" }, icon("calendar", 40), el("p", {}, monthName(S.month, lang)), canEdit ? el("p", { class: "hint" }, `${t("add")} ↑`) : null);
 
   // The printed public-talk board reuses the same span of saved rows gathered
@@ -83,7 +84,7 @@ export function renderWeekend() {
       spanRows.length ? el("button", { class: "btn", onClick: () => exportMenu({
         getHtml: () => weekendBoardHtml(spanRows, { congName: store.congregation?.name || "", month: spanLabel }),
         filename: `weekend-${monthName(S.month, "en").replace(" ", "-").toLowerCase()}`,
-        landscape: true, title: `${t("weekend")} — ${spanLabel}` }) }, icon("share", 16), lang === "ta" ? "ஏற்றுமதி" : "Export") : null,
+        landscape: true, contentWidth: PRINTABLE.landscape, title: `${t("weekend")} — ${spanLabel}` }) }, icon("share", 16), lang === "ta" ? "ஏற்றுமதி" : "Export") : null,
       canEdit ? el("button", { class: "btn btn-primary", onClick: () => openEditor(null) }, icon("plus", 16), t("add")) : null));
 
   return el("div", { class: "view" }, head, table);

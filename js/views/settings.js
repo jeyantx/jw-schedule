@@ -16,7 +16,8 @@ export function renderSettings() {
   const infoCard = el("div", { class: "card card-pad" },
     el("div", { class: "side-group", style: { padding: "0 0 10px" } }, t("settings")),
     row(t("congName"), el("span", { class: "ta", style: { fontWeight: 700 } }, c.name || "—")),
-    row("Code", el("span", { class: "chip accent" }, c.code || "—")),
+    row("Code", el("span", { class: "chip accent", title: lang === "ta"
+      ? "சபையின் தனிப்பட்ட குறியீடு — அடையாளத்திற்கு மட்டும்" : "Your congregation's unique reference ID" }, c.code || "—")),
     row(t("owner"), el("span", {}, c.ownerEmail || "—")));
 
   const stored = getStoredLang();
@@ -96,6 +97,22 @@ export function renderSettings() {
   };
 
   const ta = lang === "ta";
+
+  // Per-schedule content-language override (meta.sheet.langOverrides). Each
+  // schedule's tables + exports render in the chosen language regardless of the
+  // app-wide setting; "" (Default) inherits the app content language.
+  const langKinds = ["clm", "weekend", "av", "cleaning", "fsm", "attendant"];
+  const langOpts = [["", ta ? "இயல்பு (ஆப்)" : "Default (app)"], ["ta", "தமிழ்"], ["en", "English"]];
+  const setLangOverride = (kind, val) => {
+    const next = { ...(sheetPrefs().langOverrides || {}) };
+    if (val) next[kind] = val; else delete next[kind];
+    savePrefs({ langOverrides: next });
+  };
+  const langGrid = el("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "10px" } },
+    ...langKinds.map((k) => el("div", { class: "field" },
+      el("label", {}, t(k)),
+      select((prefs.langOverrides || {})[k] || "", langOpts, (v) => setLangOverride(k, v)))));
+
   const fmtCard = el("div", { class: "card card-pad" },
     el("div", { class: "side-group", style: { padding: "0 0 10px" } }, icon("palette", 16), " ", ta ? "அட்டவணை வடிவமைப்பு" : "Sheet appearance"),
     el("div", { class: "field" }, el("label", {}, ta ? "வண்ணத் தீம்" : "Colour theme"), themeRow),
@@ -131,6 +148,12 @@ export function renderSettings() {
         textIn(prefs.cleaningPartA, ta ? "பெருக்குதல் & கழிவறை" : "Brooming & Toilet", (v) => savePrefs({ cleaningPartA: v || undefined }))),
       el("div", { class: "field grow" }, el("label", {}, ta ? "சுத்தம் பகுதி B பெயர்" : "Cleaning part B label"),
         textIn(prefs.cleaningPartB, ta ? "துடைத்தல் & மேடை" : "Mopping & Stage", (v) => savePrefs({ cleaningPartB: v || undefined })))),
+    el("div", { class: "field", style: { marginTop: "12px", borderTop: "1px solid var(--border)", paddingTop: "12px" } },
+      el("label", {}, ta ? "அட்டவணை மொழி" : "Schedule language"),
+      el("p", { class: "hint", style: { margin: "2px 0 8px" } },
+        ta ? "ஒவ்வொரு அட்டவணைக்கும் தனித்தனி மொழி — ஆப் அமைப்பை மீறும்."
+           : "Set a language per schedule — overrides the app-wide setting."),
+      langGrid),
     el("p", { class: "hint", style: { marginTop: "6px" } },
       ta ? "வண்ணங்களும் லேபிள்களும் எல்லா PDF அட்டவணைகளுக்கும் பொருந்தும்." : "Theme colours and labels apply to every exported sheet."));
 

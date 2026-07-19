@@ -134,6 +134,15 @@ class Store {
     if (["publishers", "groups", "meta"].includes(kind)) return Object.values(this.permissions).some((p) => p && p.edit);
     return this.can(kind, "edit");
   }
+  // "Read" = at-least-view access to a kind's data. The owner reads everything;
+  // publishers/groups/meta are shared reference data everyone reads; otherwise the
+  // member must have an access entry granting view (edit implies view) on that area.
+  canReadKind(kind) {
+    if (this.isOwner()) return true;
+    if (["publishers", "groups", "meta"].includes(kind)) return true;
+    const p = this.permissions[kind];
+    return !!(p && (p.view || p.edit));
+  }
 
   /* ---- cache ---------------------------------------------------------- */
   _ck(kind) { return `jw:${this.congId}:${kind}`; }

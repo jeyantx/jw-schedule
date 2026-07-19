@@ -75,28 +75,29 @@ export function renderDashboard() {
 
   /* ---- "my assignments this month" -------------------------------------- */
   function myPortionsCard() {
-    const title = ta ? "என் பகுதிகள் (இந்த மாதம்)" : "My assignments (this month)";
+    const title = ta ? "என் பகுதிகள்" : "My assignments";
+    const pubId = resolveMemberPubId({ nameEn: store.memberNameEn });
+    const mine = pubId ? myAssignmentsForMonth(pubId, S.month) : [];
+
+    // Nothing to list (name not linked, or no assignments this month) → a slim
+    // one-line card instead of a tall empty block.
+    if (!pubId || !mine.length) {
+      const msg = !pubId
+        ? L("உங்கள் பெயரை உறுப்பினர்கள் பக்கத்தில் இணைக்கவும்", "Link your name in Members & Access")
+        : L("இந்த மாதம் உங்களுக்கு நியமனம் இல்லை", "No assignments this month");
+      return el("div", { class: "card dash-slim" }, icon(pubId ? "calendar" : "user", 18),
+        el("span", { class: "dash-slim-title" }, title),
+        el("span", { class: "muted dash-slim-msg" }, msg));
+    }
+
     const head = el("div", { class: "spread", style: { marginBottom: "8px" } },
       el("div", { class: "side-group", style: { padding: 0 } }, title),
       el("span", { class: "hint" }, monthName(S.month, lang)));
-
-    const pubId = resolveMemberPubId({ nameEn: store.memberNameEn });
-    if (!pubId) {
-      return el("div", { class: "card card-pad" }, head,
-        el("div", { class: "empty", style: { padding: "18px 0" } }, icon("users", 24),
-          el("p", { class: "muted" }, L("உங்கள் பெயரை உறுப்பினர்கள் பக்கத்தில் இணைக்கவும்", "Link your name in Members & Access"))));
-    }
-    const mine = myAssignmentsForMonth(pubId, S.month);
-    if (!mine.length) {
-      return el("div", { class: "card card-pad" }, head,
-        el("div", { class: "empty", style: { padding: "18px 0" } }, icon("calendar", 24),
-          el("p", { class: "muted" }, L("இந்த மாதம் உங்களுக்கு நியமனம் இல்லை", "No assignments for you this month"))));
-    }
     return el("div", { class: "card card-pad" }, head,
-      el("div", {}, mine.map((a) => el("div", { class: "row", style: { gap: "8px", padding: "8px 0", borderBottom: "1px solid var(--border)", flexWrap: "wrap" } },
+      el("div", {}, mine.map((a) => el("div", { class: "row dash-mine", style: { gap: "8px" } },
         el("span", { class: "hint" }, fmtDate(a.date, lang).replace(/,\s*\d{4}$/, "")),
         el("span", { class: "muted" }, "·"),
-        el("span", { style: { fontSize: "12.5px", color: "var(--text-2)" } }, t(a.area)),
+        el("span", { class: "dash-mine-area" }, t(a.area)),
         el("span", { class: "muted" }, "·"),
         el("span", { class: "ta", style: { fontWeight: 600 } }, roleLabel(a.role, lang))))));
   }
@@ -109,37 +110,43 @@ export function renderDashboard() {
         el("div", { class: "side-group", style: { padding: 0 } }, title),
         el("span", { class: "hint" }, `${fmtDate(range.from, lang)} – ${fmtDate(range.to, lang)}`)),
       entries.length
-        ? el("div", {}, entries.map((e) => el("div", { style: { padding: "8px 0", borderBottom: "1px solid var(--border)" } },
+        ? el("div", {}, entries.map((e) => el("div", { class: "dash-entry" },
             el("div", { class: "spread", style: { marginBottom: "3px" } },
-              el("span", { class: "row", style: { gap: "7px", color: "var(--text-2)", fontSize: "12.5px", fontWeight: 600 } }, icon(e.icon, 14), e.kind),
+              el("span", { class: "row dash-entry-kind" }, icon(e.icon, 14), e.kind),
               el("span", { class: "hint" }, fmtDate(e.date, lang).replace(/,\s*\d{4}$/, ""))),
             ...e.lines.map(lineRow))))
-        : el("div", { class: "empty", style: { padding: "18px 0" } }, icon("calendar", 26), el("p", { class: "muted" }, ta ? "அட்டவணை இல்லை" : "Nothing scheduled")));
+        : el("div", { class: "dash-empty" }, icon("calendar", 16), ta ? "அட்டவணை இல்லை" : "Nothing scheduled"));
   }
 
-  // One assignment line. label==null → a bold heading (talk theme, fsm time/loc);
-  // otherwise a compact "Label: Value" row.
+  // One assignment line. Three shapes:
+  //  • { label:null, value } → a bold heading (talk theme, fsm time/loc)
+  //  • { muted:true, value } → a single muted note (e.g. unassigned-count summary)
+  //  • { label, value }      → "Label : Value"; the label ellipsizes (title= full)
+  //                            so long portion titles stay on one line.
   function lineRow(ln) {
     if (!ln) return null;
-    if (ln.label == null) return el("div", { class: "ta", style: { fontWeight: 600, marginTop: "2px" } }, ln.value);
-    return el("div", { class: "ta", style: { fontSize: "12.5px", lineHeight: 1.55 } },
-      el("span", { class: "hint" }, ln.label + ": "), ln.value);
+    if (ln.muted) return el("div", { class: "ta dash-note" }, ln.value);
+    if (ln.label == null) return el("div", { class: "ta dash-head" }, ln.value);
+    return el("div", { class: "ta dash-line" },
+      el("span", { class: "dash-k", title: ln.label }, ln.label),
+      el("span", { class: "dash-v" }, ln.value));
   }
 
   function weekEntries({ from, to }) {
     const inRange = (d) => d && d >= from && d <= to;
     const out = [];
-    for (const w of store.get("clm")) if (inRange(w.date))
+    // Per-kind READ gating (Task 2): only surface a schedule the member may read.
+    if (store.canReadKind("clm")) for (const w of store.get("clm")) if (inRange(w.date))
       out.push({ date: w.date, icon: "gem", kind: t("clm"), lines: clmLines(w) });
-    for (const w of store.get("weekend")) if (inRange(w.date))
+    if (store.canReadKind("weekend")) for (const w of store.get("weekend")) if (inRange(w.date))
       out.push({ date: w.date, icon: "calendar", kind: t("weekend"), lines: weekendLines(w) });
-    for (const r of store.get("av")) if (inRange(r.date))
+    if (store.canReadKind("av")) for (const r of store.get("av")) if (inRange(r.date))
       out.push({ date: r.date, icon: "volume", kind: t("av"), lines: fieldLines(r, "av") });
-    for (const r of store.get("cleaning")) if (inRange(r.weekOf))
+    if (store.canReadKind("cleaning")) for (const r of store.get("cleaning")) if (inRange(r.weekOf))
       out.push({ date: r.weekOf, icon: "broom", kind: t("cleaning"), lines: fieldLines(r, "cleaning") });
-    for (const r of store.get("fsm")) if (inRange(r.date))
+    if (store.canReadKind("fsm")) for (const r of store.get("fsm")) if (inRange(r.date))
       out.push({ date: r.date, icon: "briefcase", kind: t("fsm"), lines: fsmLines(r) });
-    for (const r of store.get("attendant")) if (inRange(r.date))
+    if (store.canReadKind("attendant")) for (const r of store.get("attendant")) if (inRange(r.date))
       out.push({ date: r.date, icon: "door", kind: t("attendant"), lines: fieldLines(r, "attendant") });
     return out.sort((a, b) => a.date.localeCompare(b.date));
   }
@@ -181,26 +188,29 @@ export function renderDashboard() {
     return lines;
   }
 
-  // Midweek: chairman + prayer, then each portion with an assignee (or a title)
-  // as "portion title or number: assignee (+ assistant / reader)". Empty student
-  // parts are skipped so the card stays scannable.
+  // Midweek: chairman + prayer, then each ASSIGNED portion as "portion title or
+  // number: assignee (+ assistant / reader)". Unassigned portions (a title but no
+  // assignee) are collapsed into a single muted count line so the card stays calm
+  // and scannable; truly empty student parts are ignored. Chairman/prayer always show.
   function clmLines(w) {
     const lines = [{ label: L("சேர்மன்", "Chairman"), value: w.chairman ? nm(w.chairman) : "—" }];
     if (w.openingPrayer) lines.push({ label: L("ஜெபம்", "Prayer"), value: nm(w.openingPrayer) });
     const secs = w.sections || {};
-    let n = 0;
+    let n = 0, unassigned = 0;
     for (const key of ["treasures", "apply", "living"]) {
       for (const p of (secs[key] || [])) {
         n++;
         const who = nm(p.assignee);
         const title = p.title && String(p.title).trim();
-        if (!who && !title) continue;                 // don't list empty student parts
+        if (!who) { if (title) unassigned++; continue; }   // has a title but nobody → summarize
         const extras = [];
         if (p.assistant) { const a = nm(p.assistant); if (a) extras.push(a); }
         if (typeof p.reader === "string") { const rd = nm(p.reader); if (rd) extras.push(rd); }
-        lines.push({ label: title || `#${n}`, value: [who || "—", ...extras].join(" + ") });
+        lines.push({ label: title || `#${n}`, value: [who, ...extras].join(" + ") });
       }
     }
+    if (unassigned) lines.push({ muted: true,
+      value: ta ? `${unassigned} பகுதிகள் நியமிக்கப்படவில்லை` : `${unassigned} portion${unassigned > 1 ? "s" : ""} unassigned` });
     if (w.closingPrayer && w.closingPrayer !== w.openingPrayer)
       lines.push({ label: L("ஜெபம்", "Prayer"), value: nm(w.closingPrayer) });
     return lines;
@@ -208,19 +218,20 @@ export function renderDashboard() {
 
   /* ---- pending schedules per month -------------------------------------- */
   function pendingCard(title, monthDate) {
-    const items = pendingForMonth(monthDate);
+    // Read gating (Task 2): only count schedules the member may read.
+    const items = pendingForMonth(monthDate).filter((it) => store.canReadKind(it.kind));
     return el("div", { class: "card card-pad" },
       el("div", { class: "spread", style: { marginBottom: "8px" } },
         el("div", { class: "side-group", style: { padding: 0 } }, title),
         el("span", { class: "hint" }, monthName(monthDate, lang))),
-      el("div", {}, items.map((it) => {
+      items.length ? el("div", {}, items.map((it) => {
         const done = it.expected > 0 && it.filled >= it.expected;
         const color = it.expected === 0 ? "var(--text-3)" : done ? "var(--ok)" : "var(--warn)";
         return el("div", { class: "spread row-click", style: { padding: "8px 0", borderBottom: "1px solid var(--border)" },
           onClick: () => { location.hash = "#/" + it.kind; } },
           el("span", { class: "row", style: { gap: "7px", color: "var(--text-2)", fontSize: "12.5px", fontWeight: 600 } }, icon(PENDING_KINDS[it.kind], 14), t(it.kind)),
           el("span", { style: { fontWeight: 700, fontSize: "12.5px", color } }, it.expected === 0 ? "—" : `${it.filled}/${it.expected}`));
-      })));
+      })) : el("div", { class: "dash-empty" }, icon("lock", 16), ta ? "பார்வை அனுமதி இல்லை" : "No read access"));
   }
 }
 

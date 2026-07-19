@@ -3,12 +3,13 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 const { store } = await import("../js/store.js");
-const { kindFields, kindMeta, roleBoardHtml, fsmBoardHtml, weekendBoardHtml, weeklyCardHtml, displayName, pubLabel, groupLabel, sheetPrefs, boardTheme } =
+const { kindFields, kindMeta, roleBoardHtml, fsmBoardHtml, weekendBoardHtml, weeklyCardHtml, displayName, pubLabel, groupLabel, sheetPrefs, boardTheme, contentLangFor } =
   await import("../js/features/boards.js");
 const { THEMES } = await import("../js/features/boardTemplate.js");
+const { getContentLang } = await import("../js/i18n.js");
 
 store.docs.publishers = [
-  { id: "p1", name: "ஜெயந்த்", gender: "brother" },
+  { id: "p1", name: "ஜெயந்த்", nameEn: "Jeyanth", gender: "brother" },
   { id: "p2", name: "மேரி", gender: "sister" },
 ];
 store.docs.groups = [{ id: "g1", name: "மகாலட்சுமி நகர்" }, { id: "g2", name: "ஆதனூர்" }];
@@ -131,6 +132,44 @@ test("kindMeetingDays: defaults + meta.sheet overrides (DOM-free)", async () => 
   assert.deepEqual(kindMeetingDays("clm"), [2]);
   assert.deepEqual(kindMeetingDays("av"), [2, 6]);
   assert.deepEqual(kindMeetingDays("fsm"), [0]);
+  store.docs.meta = {};
+});
+
+test("contentLangFor: per-kind override, else app content language", () => {
+  store.docs.meta = { sheet: { langOverrides: { weekend: "en", clm: "" } } };
+  assert.equal(contentLangFor("weekend"), "en");     // explicit override
+  assert.equal(contentLangFor("clm"), getContentLang()); // "" → inherit app
+  assert.equal(contentLangFor("av"), getContentLang());  // unset → inherit app
+  store.docs.meta = { sheet: { langOverrides: { weekend: "bogus" } } };
+  assert.equal(contentLangFor("weekend"), getContentLang()); // invalid → inherit
+  store.docs.meta = {};
+});
+
+test("langOverrides: one schedule renders English while others stay Tamil (app=ta)", () => {
+  assert.equal(getContentLang(), "ta"); // test env default
+  store.docs.meta = { sheet: { langOverrides: { weekend: "en" } } };
+  const wknd = weekendBoardHtml([{ date: "2026-05-03", chairman: "p1",
+    talk: { number: 12, theme: "தலைப்பு", speaker: "p2" }, wt: { conductor: "p1", reader: "p2" } }], {});
+  // weekend override → English title + column labels + English publisher name
+  assert.ok(wknd.includes("WEEKEND MEETING"));
+  assert.ok(wknd.includes("Chairman"));
+  assert.ok(wknd.includes("Public Talk"));
+  assert.ok(wknd.includes("Br. Jeyanth"));   // p1 nameEn under en
+  // a non-overridden schedule keeps the Tamil app content language
+  const av = roleBoardHtml("av", [{ date: "2026-05-06", mixer: "p1", media: "p2", micLeft: "p1", micRight: "p2" }], {});
+  assert.ok(av.includes("ஆடியோ மிக்சர்"));   // Tamil label
+  assert.ok(av.includes("Br. ஜெயந்த்"));     // Tamil name (no override)
+  store.docs.meta = {};
+});
+
+test("langOverrides: weekly card + role board follow their own kind's override", () => {
+  store.docs.meta = { sheet: { langOverrides: { av: "en", cleaning: "en" } } };
+  const card = weeklyCardHtml("av", { date: "2026-05-06", mixer: "p1", media: "p2", micLeft: "p1", micRight: "p2" });
+  assert.ok(card.includes("Audio Mixer"));   // en field label
+  assert.ok(card.includes("AUDIO / VIDEO")); // en title
+  // cleaning override independent of av
+  const clean = roleBoardHtml("cleaning", [{ weekOf: "2026-05-10", partA: "g1", partB: "g2" }], {});
+  assert.ok(clean.includes("CLEANING"));
   store.docs.meta = {};
 });
 

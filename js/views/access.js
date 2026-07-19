@@ -35,9 +35,9 @@ export function renderAccess() {
         el("td", {}, el("div", { class: "row" }, el("span", { style: { fontWeight: 600 } }, a.email), owner ? el("span", { class: "badge warn" }, t("owner")) : null)),
         el("td", {}, a.nameEn ? el("span", {}, a.nameEn) : el("span", { class: "muted" }, "—")),
         ...cells,
-        el("td", {}, owner ? null : el("div", { class: "row" },
-          el("button", { class: "btn btn-icon btn-ghost btn-sm", onClick: () => openGrant(a) }, icon("pencil", 15)),
-          el("button", { class: "btn btn-icon btn-ghost btn-sm", onClick: () => revoke(a.email) }, icon("trash", 15))))));
+        el("td", {}, el("div", { class: "row" },
+          el("button", { class: "btn btn-icon btn-ghost btn-sm", title: t("edit"), onClick: () => openGrant(a) }, icon("pencil", 15)),
+          owner ? null : el("button", { class: "btn btn-icon btn-ghost btn-sm", title: t("revoke"), onClick: () => revoke(a.email) }, icon("trash", 15))))));
     });
     body.replaceChildren(el("table", { class: "tbl" },
       el("thead", {}, el("tr", {}, el("th", {}, t("email")), el("th", {}, t("nameEn")), ...AREAS.map((a) => el("th", {}, t(a))), el("th", {}, ""))),
@@ -51,6 +51,10 @@ export function renderAccess() {
   }
 
   function openGrant(existing) {
+    // The owner already has full access; editing their record is only for the
+    // English name (used to map them to a publisher on the dashboard), so the
+    // permission grid is hidden and their stored permissions are left untouched.
+    const isOwnerRow = !!existing && existing.email.toLowerCase() === (store.congregation?.ownerEmail || "").toLowerCase();
     const emailI = el("input", { class: "input", type: "email", value: existing?.email || "", placeholder: "person@example.com", disabled: !!existing });
     const nameEnI = el("input", { class: "input", value: existing?.nameEn || "", placeholder: "e.g. John Peter" });
     const perms = {};
@@ -70,7 +74,8 @@ export function renderAccess() {
       title: existing ? t("permissions") : t("grant"),
       body: el("div", { style: { display: "flex", flexDirection: "column", gap: "16px" } },
         el("div", { class: "field" }, el("label", {}, t("email")), emailI),
-        el("div", { class: "field" }, el("label", {}, t("nameEn")), nameEnI), grid),
+        el("div", { class: "field" }, el("label", {}, t("nameEn")), nameEnI),
+        isOwnerRow ? null : grid),
       actions: [
         { label: t("cancel"), onClick: (c) => c() },
         { label: t("save"), class: "btn-primary", onClick: async (close) => {

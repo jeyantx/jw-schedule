@@ -9,6 +9,52 @@ import { api } from "../api.js";
 import { el, icon, modal, toast } from "../ui.js";
 import { getLang, t } from "../i18n.js";
 
+/* ---- image tight-crop + sharpen ----------------------------------------- */
+// The backend /image endpoint screenshots the HTML at a viewport `width`
+// (clamped 320..2400) and captures the FULL page. The board/card templates
+// render a small element centred inside an A4-ish body, so a plain screenshot
+// is mostly empty margin and — being 1× — soft. For the image path only we:
+//   1. wrap the body content in a zoom div (SmartBrowz honours CSS `zoom`, same
+//      as the CLM print-fit) so text is rasterised `zoom`× sharper, and
+//   2. strip page margins + the board's auto-centering so the full-page capture
+//      hugs the content with no empty band.
+// Then we ask for width = contentWidth × zoom so the viewport equals the scaled
+// content exactly → a tight crop. Never applied on the PDF path.
+//
+// Zoom is 3×, not 2×: the backend screenshot height is max(contentHeight, 800px
+// viewport floor) — measured live. At 2× a typical weekly card (~330px tall)
+// renders ~660px < 800 → padded with an empty band (exactly the whitespace the
+// user reported). At 3× a multi-field card clears 800px so the capture hugs it,
+// and the extra sharpness helps small WhatsApp thumbnails. Wide boards just clamp
+// to IMG_MAX_W (recomputing zoom), so 3× never overflows the backend limit.
+const IMG_ZOOM = 3;       // 3× rasterisation + clears the 800px height floor for cards
+const IMG_MAX_W = 2400;   // backend viewport clamp (width)
+const IMG_PAD = 6;        // a few px of white on the right so a border is never clipped
+
+// Pure string transform (exported for unit tests). Injects an override <style>
+// before </head> and wraps the <body> content in <div id="__imgzoom">.
+export function imageWrapHtml(html, zoom = IMG_ZOOM) {
+  const css = `<style id="__imgfit">`
+    + `html,body{margin:0!important;padding:0!important;background:#fff!important;text-align:left!important}`
+    + `#__imgzoom{zoom:${zoom};display:inline-block;background:#fff}`
+    + `#__imgzoom>*{margin:0!important}`
+    + `</style>`;
+  let out = /<\/head>/i.test(html) ? html.replace(/<\/head>/i, css + "</head>") : css + html;
+  out = out.replace(/<body([^>]*)>/i, `<body$1><div id="__imgzoom">`);
+  out = out.replace(/<\/body>/i, `</div></body>`);
+  return out;
+}
+
+// Given the content's CSS px width, return { html (wrapped), width (viewport) }.
+// Falls to the legacy path (no wrap) when contentWidth is unknown.
+export function imagePlan(html, contentWidth) {
+  if (!contentWidth || !(contentWidth > 0)) return { html, width: undefined };
+  let zoom = IMG_ZOOM;
+  let width = Math.round(contentWidth * zoom) + IMG_PAD;
+  if (width > IMG_MAX_W) { width = IMG_MAX_W; zoom = +((IMG_MAX_W - IMG_PAD) / contentWidth).toFixed(4); }
+  return { html: imageWrapHtml(html, zoom), width };
+}
+
 /* ---- shared helpers ----------------------------------------------------- */
 // Persistent "working…" toast with a spinner; returns the toast handle so the
 // caller can .update(...) it to a success/error state (auto-dismissing) or
@@ -68,10 +114,11 @@ export async function exportPdf(html, filename = "schedule", { landscape = true,
   }
 }
 
-export async function exportImage(html, filename = "schedule", { width = 1120 } = {}) {
+export async function exportImage(html, filename = "schedule", { width = 1120, contentWidth } = {}) {
   const b = busy(t("saving"));
   try {
-    const blob = await api.image(html, { width, fullPage: true, filename });
+    const plan = imagePlan(html, contentWidth);
+    const blob = await api.image(plan.html, { width: plan.width ?? width, fullPage: true, filename });
     downloadBlob(blob, `${filename}.png`);
     b.update(t("saved"), "ok");
   } catch (e) {
@@ -84,9 +131,11 @@ export async function exportImage(html, filename = "schedule", { width = 1120 } 
 // image). `getHtml` may be async (CLM builds its HTML with embedded icons) —
 // it is awaited once per action under the spinner toast. The modal closes
 // before the async work so the toast is visible; a running-guard + disabled
-// rows stop a fast double-click firing twice. Image width follows orientation
-// (landscape boards ≈ 1120px wide, portrait ≈ 800px).
-export function exportMenu({ getHtml, filename = "schedule", landscape = true, marginMm = 6, title } = {}) {
+// rows stop a fast double-click firing twice. For images, `contentWidth` (a
+// number, or a fn(html)→number for the variable-width CLM sheet) drives the
+// tight-crop + 2× sharpening via imagePlan; without it, image width falls back
+// to orientation (landscape ≈ 1120px, portrait ≈ 800px).
+export function exportMenu({ getHtml, filename = "schedule", landscape = true, marginMm = 6, title, contentWidth } = {}) {
   const ta = getLang() === "ta";
   const width = landscape ? 1120 : 800;
 
@@ -95,6 +144,8 @@ export function exportMenu({ getHtml, filename = "schedule", landscape = true, m
     let html;
     try { html = await getHtml(); }
     catch (e) { b.update(e.message || "Export failed", "danger"); return; }
+    // Resolve the content width once (may parse the freshly built html for CLM).
+    const cw = typeof contentWidth === "function" ? contentWidth(html) : contentWidth;
     try {
       if (kind === "pdf-dl") {
         const blob = await api.pdf(html, { landscape, marginMm, filename });
@@ -103,10 +154,12 @@ export function exportMenu({ getHtml, filename = "schedule", landscape = true, m
         const blob = await api.pdf(html, { landscape, marginMm, filename });
         b.dismiss(); await shareBlob(blob, `${filename}.pdf`, "application/pdf", title || filename);
       } else if (kind === "img-dl") {
-        const blob = await api.image(html, { width, fullPage: true, filename });
+        const plan = imagePlan(html, cw);
+        const blob = await api.image(plan.html, { width: plan.width ?? width, fullPage: true, filename });
         downloadBlob(blob, `${filename}.png`); b.update(t("saved"), "ok");
       } else if (kind === "img-share") {
-        const blob = await api.image(html, { width, fullPage: true, filename });
+        const plan = imagePlan(html, cw);
+        const blob = await api.image(plan.html, { width: plan.width ?? width, fullPage: true, filename });
         b.dismiss(); await shareBlob(blob, `${filename}.png`, "image/png", title || filename);
       }
     } catch (e) {
