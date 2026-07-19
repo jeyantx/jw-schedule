@@ -99,6 +99,14 @@ export function renderSettings() {
   const fmtCard = el("div", { class: "card card-pad" },
     el("div", { class: "side-group", style: { padding: "0 0 10px" } }, icon("palette", 16), " ", ta ? "அட்டவணை வடிவமைப்பு" : "Sheet appearance"),
     el("div", { class: "field" }, el("label", {}, ta ? "வண்ணத் தீம்" : "Colour theme"), themeRow),
+    el("div", { class: "field", style: { marginTop: "10px", maxWidth: "260px" } },
+      el("label", {}, ta ? "நடுவார கூட்ட நாள்" : "Midweek meeting day"),
+      select(String(prefs.midweekDay), [
+        ["2", ta ? "செவ்வாய்" : "Tuesday"],
+        ["3", ta ? "புதன்" : "Wednesday"],
+        ["4", ta ? "வியாழன்" : "Thursday"],
+        ["5", ta ? "வெள்ளி" : "Friday"],
+      ], (v) => { savePrefs({ midweekDay: Number(v) }); S.refresh && S.refresh(); })),
     el("div", { class: "row wrap", style: { gap: "14px", marginTop: "10px" } },
       el("div", { class: "field grow" }, el("label", {}, ta ? "சுத்தம் — வடிவம்" : "Cleaning — format"),
         select(prefs.cleaningFormat, [
@@ -126,9 +134,9 @@ export function renderSettings() {
     el("p", { class: "hint", style: { marginTop: "6px" } },
       ta ? "வண்ணங்களும் லேபிள்களும் எல்லா PDF அட்டவணைகளுக்கும் பொருந்தும்." : "Theme colours and labels apply to every exported sheet."));
 
-  return el("div", { class: "view" },
+  return el("div", { class: "view settings-view" },
     el("div", { class: "view-head" }, el("h2", {}, t("settings"))),
-    el("div", { style: { display: "flex", flexDirection: "column", gap: "16px", maxWidth: "640px" } }, infoCard, prefCard, fmtCard, backupCard));
+    el("div", { class: "settings-stack", style: { display: "flex", flexDirection: "column", gap: "16px", maxWidth: "640px" } }, infoCard, prefCard, fmtCard, backupCard));
 
   function row(k, v) { return el("div", { class: "spread", style: { padding: "8px 0", borderBottom: "1px solid var(--border)" } }, el("span", { class: "muted" }, k), v); }
 

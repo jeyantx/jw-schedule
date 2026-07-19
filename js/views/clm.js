@@ -10,8 +10,9 @@ import { el, icon, toast, combo, confirmDialog, drawer, modal } from "../ui.js";
 import { S, inMonth, monthName, fmtDate, monthDates } from "../state.js";
 import { kindMeetingDays, pubLabel } from "../features/boards.js";
 import { missingSince, recentRepeats, statsFor, collectAssignments } from "../features/intelligence.js";
-import { fetchWeekImages, matchWeekImage, fetchMonthPrograms, fetchWeekProgram, matchWeek, pendingWeekDates } from "../features/wol.js";
+import { fetchWeekImages, matchWeekImage, fetchMonthPrograms, fetchWeekProgram, matchWeek, pendingWeekDates, workbookMonthPath } from "../features/wol.js";
 import { buildClmHtml, buildClmWeekHtml } from "../features/clmSheet.js";
+import { toPastel, spreadDistinct, sampleImageColor, hexToRgb, hslToHex } from "../features/weekTint.js";
 import { exportMenu } from "../features/pdf.js";
 import { assetDataUri } from "../features/assets.js";
 import { clmIcon } from "../features/clmIcons.js";
@@ -38,6 +39,14 @@ function wolImageDataUri(url) {
   _imgUriCache.set(url, p);
   return p;
 }
+// Same session cache as export (data URI) reused as a Blob for canvas colour
+// sampling, so recommending a tint never triggers a second proxy round-trip for
+// an image the export already fetched. Fetching a data: URI is local (no network).
+async function wolImageBlobCached(url) {
+  const uri = await wolImageDataUri(url);
+  if (!uri) return null;
+  return (await fetch(uri)).blob();
+}
 // Return clones of the weeks with each wol image URL swapped for an embedded data
 // URI (or removed on failure — the frozen template renders nothing for a falsy image).
 async function embedWeekImages(weeks) {
@@ -49,6 +58,11 @@ async function embedWeekImages(weeks) {
 }
 // Ministry-portion type codes (apply section) — feed the Student Portions matrix.
 export const PORTION_TYPES = ["SC", "FU", "MD", "EB", "T"];
+
+// Eight evenly-spread pale pastels offered in the week-colour picker. Built via
+// hslToHex (high L / modest S) so every preset is guaranteed light enough for
+// black text — same colour band the auto/recommend paths produce.
+const PRESET_TINTS = [0, 40, 90, 140, 190, 240, 290, 330].map((h) => hslToHex({ h, s: 0.4, l: 0.92 }));
 
 const getPath = (obj, path) => path.split(".").reduce((o, k) => (o == null ? o : o[k]), obj);
 function setPath(obj, path, val) {
@@ -104,6 +118,9 @@ export function renderClm() {
   const autoBtn = el("button", { class: "btn", disabled: autofillRunning,
     onClick: () => { if (autofillRunning) return toast(L("ஏற்கனவே இயங்குகிறது", "Already running"), "danger"); autoFillMonth(); } },
     icon("globe", 16), t("autoFillMonth"));
+  const colorBtn = el("button", { class: "btn", disabled: autofillRunning,
+    onClick: () => { if (autofillRunning) return toast(L("ஏற்கனவே இயங்குகிறது", "Already running"), "danger"); autoColorMonth(); } },
+    icon("palette", 16), L("மாதம் வண்ணமிடு", "Auto-color month"));
   const pdfBtn = el("button", { class: "btn", onClick: doExport }, icon("share", 16), lang === "ta" ? "ஏற்றுமதி" : "Export");
 
   const toolbar = el("div", { class: "clm-toolbar" },
@@ -112,6 +129,7 @@ export function renderClm() {
     canEdit ? helperBtn : null,
     canEdit ? autoBtn : null,
     canEdit && weeks.length ? imgBtn : null,
+    canEdit && weeks.length ? colorBtn : null,
     el("div", { class: "grow" }),
     weeks.length ? pdfBtn : null);
 
@@ -144,9 +162,18 @@ export function renderClm() {
     conflictIds(w).forEach((id) => { if (id) used[id] = (used[id] || 0) + 1; });
 
     const card = el("div", { class: "clm-week" });
-    card.append(el("div", { class: "clm-week-head" },
+    // The week's theme colour tints the header in-app exactly as it will in the
+    // exported sheet (it is already a pale pastel → black text stays readable).
+    card.append(el("div", { class: "clm-week-head", ...(w.tint ? { style: { background: w.tint } } : {}) },
       w.image ? el("img", { class: "wk-thumb", src: w.image, alt: "", loading: "lazy" }) : null,
-      fmtDate(w.date, clang),
+      el("button", { class: "clm-date", type: "button",
+        title: lang === "ta" ? "தேதி விருப்பங்கள்" : "Date options",
+        "aria-label": lang === "ta" ? "தேதி விருப்பங்கள்" : "Date options",
+        onClick: () => weekDateMenu(w) }, fmtDate(w.date, clang)),
+      canEdit ? el("button", { class: "clm-swatch", type: "button",
+        title: L("வார வண்ணம்", "Week color"), "aria-label": L("வார வண்ணம்", "Week color"),
+        ...(w.tint ? { style: { background: w.tint } } : {}),
+        onClick: () => openTintPicker(w) }, w.tint ? null : icon("palette", 13)) : null,
       el("span", { class: "row", style: { gap: "2px" } },
         el("button", { class: "btn btn-icon btn-ghost btn-sm", title: lang === "ta" ? "வார அட்டவணை (WhatsApp)" : "Weekly sheet",
           onClick: () => doExportWeek(w) }, icon("share", 14)),
@@ -160,7 +187,11 @@ export function renderClm() {
     CLM_SECTIONS.forEach((sec) => {
       card.append(el("div", { class: `clm-sec ${sec.cls}` }, clmIcon(sec.key, 15) || icon(sec.icon, 15), sec[clang] || sec.en));
       const parts = (w.sections && w.sections[sec.key]) || [];
-      parts.forEach((p, i) => { n++; card.append(partRow(w, sec.key, i, p, n, used)); });
+      parts.forEach((p, i) => {
+        n++; card.append(partRow(w, sec.key, i, p, n, used));
+        // insert affordance BETWEEN parts — splices a blank part after index i
+        if (canEdit && i < parts.length - 1) card.append(insertLine(w, sec.key, i));
+      });
       if (canEdit) card.append(el("button", { class: "btn btn-ghost btn-sm", style: { margin: "4px 8px 8px", color: "var(--text-3)" },
         onClick: () => { p_add(w, sec.key); } }, icon("plus", 14), sec[lang] || sec.en));
     });
@@ -181,6 +212,90 @@ export function renderClm() {
 
   function labelLine(label, valueNode) {
     return el("div", { class: "clm-line" }, el("span", { class: "lbl" }, label), valueNode);
+  }
+
+  // Thin hover-reveal insert line between two parts → adds a blank part after idx.
+  function insertLine(w, secKey, idx) {
+    return el("div", { class: "clm-insert", role: "button", tabIndex: 0,
+      title: lang === "ta" ? "இங்கே பகுதி சேர்" : "Insert part here",
+      "aria-label": lang === "ta" ? "இங்கே பகுதி சேர்" : "Insert part here",
+      onClick: () => p_insert(w, secKey, idx),
+      onKeydown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); p_insert(w, secKey, idx); } } },
+      el("span", { class: "clm-insert-btn" }, icon("plus", 12)));
+  }
+
+  // Click the week date → small modal: change the date (dup-guarded) or open the
+  // matching wol.jw.org workbook page. No per-week doc URL is stored, so this
+  // opens the workbook MONTH page for the week's date.
+  function weekDateMenu(w) {
+    const dateInp = el("input", { class: "input", type: "date", value: w.date || "" });
+    const base = (w.date || firstOfMonthIso()) + "T00:00:00";
+    const wolUrl = `https://wol.jw.org/${workbookMonthPath(new Date(base), "en")}`;
+    const body = el("div", { style: { display: "flex", flexDirection: "column", gap: "14px" } });
+    let close = () => {};
+    if (canEdit) {
+      body.append(el("div", { class: "field" },
+        el("label", {}, L("தேதியை மாற்று", "Change date")),
+        el("div", { class: "row", style: { gap: "8px" } }, dateInp,
+          el("button", { class: "btn btn-primary", onClick: () => {
+            const d = dateInp.value;
+            if (!d) return toast(t("date"), "danger");
+            if (d !== w.date && store.get("clm").some((x) => x.date === d))
+              return toast(L("இந்த வாரம் ஏற்கெனவே உள்ளது", "Week exists"), "danger");
+            const next = clone(w); next.date = d; editing = null; commit(next);
+            toast(t("saved"), "ok"); close();
+          } }, L("சேமி", "Save")))));
+    }
+    body.append(el("button", { class: "btn", style: { justifyContent: "flex-start" },
+      onClick: () => window.open(wolUrl, "_blank", "noopener") },
+      icon("globe", 16), L("wol.jw.org பக்கம் திற", "Open wol.jw.org")));
+    close = modal({ title: fmtDate(w.date, lang), body }).close;
+  }
+
+  // Per-week theme colour picker. A row of light presets + a native colour input
+  // (whatever the user picks is run through toPastel so it can never come out
+  // dark), plus a "recommend from image" action enabled only when a thumbnail
+  // exists. A manual pick is respected as-is — only the month pass spreads hues.
+  function openTintPicker(w) {
+    const body = el("div", { style: { display: "flex", flexDirection: "column", gap: "16px" } });
+    let close = () => {};
+    const apply = (hex) => {
+      const next = clone(w);
+      if (hex) next.tint = hex; else delete next.tint;
+      editing = null; commit(next); toast(t("saved"), "ok"); close();
+    };
+    const isSel = (hex) => w.tint && w.tint.toLowerCase() === hex.toLowerCase();
+
+    const presetRow = el("div", { class: "tint-presets" },
+      ...PRESET_TINTS.map((hex) => el("button", {
+        class: "tint-swatch" + (isSel(hex) ? " sel" : ""), type: "button", title: hex,
+        style: { background: hex }, onClick: () => apply(hex),
+      })));
+    body.append(el("div", { class: "field" }, el("label", {}, L("வண்ணங்கள்", "Colors")), presetRow));
+
+    const colorInp = el("input", { type: "color", class: "input",
+      value: w.tint || "#eef3fb", style: { width: "56px", height: "34px", padding: "2px" } });
+    body.append(el("div", { class: "field" }, el("label", {}, L("சொந்த வண்ணம்", "Custom color")),
+      el("div", { class: "row", style: { gap: "8px" } }, colorInp,
+        el("button", { class: "btn", onClick: () => apply(toPastel(hexToRgb(colorInp.value))) },
+          L("இந்த வண்ணத்தைப் பயன்படுத்து", "Use this color")))));
+
+    const recBtn = el("button", { class: "btn", disabled: !w.image,
+      title: w.image ? "" : L("முதலில் படம் ஏற்றவும்", "Load an image first"),
+      onClick: async () => {
+        recBtn.disabled = true; const orig = recBtn.textContent;
+        recBtn.textContent = L("மாதிரி எடுக்கிறது…", "Sampling…");
+        const hex = await sampleImageColor(w.image, wolImageBlobCached);
+        if (hex) apply(hex);
+        else { toast(L("படத்திலிருந்து வண்ணம் எடுக்க முடியவில்லை", "Couldn't read a color from the image"), "danger");
+          recBtn.disabled = false; recBtn.textContent = orig; }
+      } }, icon("image", 15), L("படத்திலிருந்து பரிந்துரை", "Recommend from image"));
+
+    const clearBtn = el("button", { class: "btn btn-ghost", disabled: !w.tint,
+      onClick: () => apply(null) }, icon("x", 15), L("நீக்கு", "Clear"));
+
+    body.append(el("div", { class: "row", style: { gap: "8px", flexWrap: "wrap" } }, recBtn, clearBtn));
+    close = modal({ title: L("வார வண்ணம்", "Week color"), body }).close;
   }
 
   function partRow(w, secKey, idx, part, no, used) {
@@ -306,9 +421,21 @@ export function renderClm() {
   function p_add(w, secKey) {
     const next = clone(w);
     next.sections[secKey] = next.sections[secKey] || [];
-    const role = secKey === "treasures" ? "clm.treasures" : secKey === "apply" ? "clm.student" : "clm.living";
-    next.sections[secKey].push({ min: 4, role });
+    next.sections[secKey].push(newPart(secKey));
     editing = null; commit(next);
+  }
+  // Insert a blank part BETWEEN existing parts, right after `idx` in the section.
+  function p_insert(w, secKey, idx) {
+    const next = clone(w);
+    next.sections[secKey] = next.sections[secKey] || [];
+    next.sections[secKey].splice(idx + 1, 0, newPart(secKey));
+    editing = null; commit(next);
+  }
+  // Same shape as an appended part (min + role); a titled "Local Needs"-style
+  // part is produced by the editor when the user types a free-text title.
+  function newPart(secKey) {
+    const role = secKey === "treasures" ? "clm.treasures" : secKey === "apply" ? "clm.student" : "clm.living";
+    return { min: 4, role };
   }
   function p_remove(w, secKey, idx) {
     const next = clone(w); next.sections[secKey].splice(idx, 1); editing = null; commit(next);
@@ -508,11 +635,69 @@ export function renderClm() {
         if (r.status === "ok") { commit(r.week); created++; }
         else { skipped++; if (/memorial|நினைவு/i.test(r.msg)) memorial++; }
       }
+      // Colour the whole month (including the weeks just created) — distinct per
+      // month. Best-effort: a colouring failure never fails the auto-fill.
+      const monthWeeks = monthWeeksInOrder();
+      if (monthWeeks.length) {
+        tst.update(L("வண்ணம் தேர்ந்தெடுக்கிறது…", "Choosing colors…"), "", { persist: true });
+        try { await applyMonthTints(monthWeeks); } catch { /* colour is a bonus */ }
+      }
       const note = memorial ? L(` (${memorial} நினைவு வாரம்)`, ` (${memorial} memorial)`) : "";
       tst.update(L(`${created} வாரம் நிரப்பப்பட்டது · ${skipped} தவிர்க்கப்பட்டது${note}`,
         `${created} weeks pre-filled · ${skipped} skipped${note}`), created ? "ok" : "danger");
     } catch (e) {
       tst.update(L("தானாக நிரப்ப முடியவில்லை: ", "Auto-fill failed: ") + (e.message || ""), "danger");
+    } finally {
+      autofillRunning = false; S.refresh();
+    }
+  }
+
+  /* ---------- per-month theme colours ---------- */
+  // The month's saved weeks in date order (re-read fresh — commit mutates store).
+  // A function declaration (not a const arrow): this sits AFTER renderClm's
+  // return, so a const would stay uninitialized (TDZ) — the hoisted auto-fill/
+  // auto-color handlers call it, so it must be reachable regardless of position.
+  function monthWeeksInOrder() {
+    return store.get("clm").filter((x) => inMonth(x.date)).sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+  }
+
+  // Sample each week's thumbnail (date order); a week with no image / a failed
+  // sample falls back to an evenly-spread pastel by position. spreadDistinct then
+  // guarantees no two weeks in the month share a hue. Returns hexes aligned to `weeks`.
+  async function sampleMonthTints(weeks) {
+    const raw = [];
+    for (let i = 0; i < weeks.length; i++) {
+      let hex = weeks[i].image ? await sampleImageColor(weeks[i].image, wolImageBlobCached) : null;
+      if (!hex) hex = hslToHex({ h: (i * 360) / weeks.length, s: 0.4, l: 0.92 });
+      raw.push(hex);
+    }
+    return spreadDistinct(raw);
+  }
+
+  // Compute + commit a distinct pastel for every week of the month. Does NOT touch
+  // autofillRunning (callers own the lock) so it can be reused inside autoFillMonth.
+  async function applyMonthTints(weeks) {
+    const hexes = await sampleMonthTints(weeks);
+    weeks.forEach((w, i) => {
+      const cur = store.get("clm").find((x) => x.id === w.id);
+      if (cur) { const next = clone(cur); next.tint = hexes[i]; commit(next); }
+    });
+    return weeks.length;
+  }
+
+  // Toolbar action: colour the current month's weeks (distinct per month), reusing
+  // the one-at-a-time lock so it can't overlap an auto-fill.
+  async function autoColorMonth() {
+    if (autofillRunning) return toast(L("ஏற்கனவே இயங்குகிறது", "Already running"), "danger");
+    const weeks = monthWeeksInOrder();
+    if (!weeks.length) return toast(L("வண்ணமிட வாரங்கள் இல்லை", "No weeks to color"), "danger");
+    autofillRunning = true; S.refresh();
+    const tst = toast(L("வண்ணம் தேர்ந்தெடுக்கிறது…", "Choosing colors…"), "", { persist: true });
+    try {
+      const n = await applyMonthTints(weeks);
+      tst.update(L(`${n} வாரம் வண்ணமிடப்பட்டது`, `${n} weeks colored`), "ok");
+    } catch (e) {
+      tst.update(L("வண்ணமிட முடியவில்லை: ", "Auto-color failed: ") + (e.message || ""), "danger");
     } finally {
       autofillRunning = false; S.refresh();
     }

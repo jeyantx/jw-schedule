@@ -33,13 +33,14 @@ export function renderAccess() {
       });
       tbody.append(el("tr", {},
         el("td", {}, el("div", { class: "row" }, el("span", { style: { fontWeight: 600 } }, a.email), owner ? el("span", { class: "badge warn" }, t("owner")) : null)),
+        el("td", {}, a.nameEn ? el("span", {}, a.nameEn) : el("span", { class: "muted" }, "—")),
         ...cells,
         el("td", {}, owner ? null : el("div", { class: "row" },
           el("button", { class: "btn btn-icon btn-ghost btn-sm", onClick: () => openGrant(a) }, icon("pencil", 15)),
           el("button", { class: "btn btn-icon btn-ghost btn-sm", onClick: () => revoke(a.email) }, icon("trash", 15))))));
     });
     body.replaceChildren(el("table", { class: "tbl" },
-      el("thead", {}, el("tr", {}, el("th", {}, t("email")), ...AREAS.map((a) => el("th", {}, t(a))), el("th", {}, ""))),
+      el("thead", {}, el("tr", {}, el("th", {}, t("email")), el("th", {}, t("nameEn")), ...AREAS.map((a) => el("th", {}, t(a))), el("th", {}, ""))),
       tbody));
   }
 
@@ -51,6 +52,7 @@ export function renderAccess() {
 
   function openGrant(existing) {
     const emailI = el("input", { class: "input", type: "email", value: existing?.email || "", placeholder: "person@example.com", disabled: !!existing });
+    const nameEnI = el("input", { class: "input", value: existing?.nameEn || "", placeholder: "e.g. John Peter" });
     const perms = {};
     const grid = el("div", { style: { display: "grid", gridTemplateColumns: "1fr auto auto", gap: "8px 16px", alignItems: "center" } });
     grid.append(el("div", {}), el("div", { class: "hint", style: { textAlign: "center" } }, t("view")), el("div", { class: "hint", style: { textAlign: "center" } }, t("editPerm")));
@@ -67,13 +69,15 @@ export function renderAccess() {
     modal({
       title: existing ? t("permissions") : t("grant"),
       body: el("div", { style: { display: "flex", flexDirection: "column", gap: "16px" } },
-        el("div", { class: "field" }, el("label", {}, t("email")), emailI), grid),
+        el("div", { class: "field" }, el("label", {}, t("email")), emailI),
+        el("div", { class: "field" }, el("label", {}, t("nameEn")), nameEnI), grid),
       actions: [
         { label: t("cancel"), onClick: (c) => c() },
         { label: t("save"), class: "btn-primary", onClick: async (close) => {
           const email = emailI.value.trim().toLowerCase();
           if (!email) return toast(t("required"), "danger");
-          try { await api.grantAccess(store.congId, email, perms); toast(t("saved"), "ok"); close(); S.refresh(); }
+          const nameEn = nameEnI.value.trim();
+          try { await api.grantAccess(store.congId, email, perms, nameEn); toast(t("saved"), "ok"); close(); S.refresh(); }
           catch (e) { toast(e.message, "danger"); }
         } },
       ],

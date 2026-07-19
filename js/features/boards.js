@@ -25,7 +25,7 @@ const L = (ta, en) => (lang() === "ta" ? ta : en);
 
 export const sheetPrefs = () => ({
   theme: "light-1", cleaningFormat: "parts", attendantFormat: "2",
-  midweekDay: 3, weekendDay: 0, fsmDay: 6, // meeting weekdays (0=Sun..6=Sat)
+  midweekDay: 4, weekendDay: 0, fsmDay: 6, // meeting weekdays (0=Sun..6=Sat; default Thu)
   weekendExportMonths: 3, // public-talk board span: 1 | 2 | 3 months
   ...((store.get("meta") || {}).sheet || {}),
 });
@@ -105,7 +105,7 @@ export function kindFields(kind, prefs = sheetPrefs(), fieldLang = getContentLan
 // ---- per-kind meeting weekdays (drive the ghost rows in the app views) ------
 // Which weekday(s) a kind meets on; DOM-free so it stays unit-testable.
 export function kindMeetingDays(kind, prefs = sheetPrefs()) {
-  const mid = prefs.midweekDay ?? 3, wkd = prefs.weekendDay ?? 0;
+  const mid = prefs.midweekDay ?? 4, wkd = prefs.weekendDay ?? 0;
   return { clm: [mid], weekend: [wkd], av: [mid, wkd], cleaning: [wkd], attendant: [wkd], fsm: [prefs.fsmDay ?? 6] }[kind] || [];
 }
 

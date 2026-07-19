@@ -120,9 +120,9 @@ test("kindMeta covers every schedule", () => {
 test("kindMeetingDays: defaults + meta.sheet overrides (DOM-free)", async () => {
   const { kindMeetingDays } = await import("../js/features/boards.js");
   store.docs.meta = {};
-  assert.deepEqual(kindMeetingDays("clm"), [3]);
+  assert.deepEqual(kindMeetingDays("clm"), [4]);
   assert.deepEqual(kindMeetingDays("weekend"), [0]);
-  assert.deepEqual(kindMeetingDays("av"), [3, 0]);
+  assert.deepEqual(kindMeetingDays("av"), [4, 0]);
   assert.deepEqual(kindMeetingDays("cleaning"), [0]);
   assert.deepEqual(kindMeetingDays("attendant"), [0]);
   assert.deepEqual(kindMeetingDays("fsm"), [6]);

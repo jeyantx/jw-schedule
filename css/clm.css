@@ -14,7 +14,7 @@
    columns responsively to stop typical Tamil names wrapping. Horizontal scroll
    is preserved. The print/PDF template keeps the compact 280px column above. */
 .clm-scroll .clm-grid { grid-auto-columns: minmax(clamp(360px, 30vw, 480px), 1fr); }
-@media (max-width: 760px) { .clm-scroll .clm-grid { grid-auto-columns: minmax(84vw, 1fr); } }
+@media (max-width: 760px) { .clm-scroll .clm-grid { grid-auto-columns: minmax(92vw, 1fr); } }
 .clm-week { border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden; background: var(--surface); display: flex; flex-direction: column; }
 .clm-week-head { background: var(--surface-2); padding: 10px; text-align: center; font-weight: 800; font-size: var(--fs-sm); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: center; gap: 8px; }
 
@@ -76,5 +76,46 @@
   background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-sm); cursor: pointer; }
 .type-chip.static { display: inline-flex; align-items: center; justify-content: center; width: max-content; }
 
-/* week thumbnail (wol.jw.org) in the card head */
-.wk-thumb { width: 24px; height: 24px; border-radius: var(--r-sm); object-fit: cover; flex: none; }
+/* week thumbnail (wol.jw.org) in the card head — 2x for legibility */
+.wk-thumb { width: 48px; height: 48px; border-radius: var(--r-sm); object-fit: cover; flex: none; }
+
+/* clickable week date → opens the date-options menu (change date / open wol) */
+.clm-date { appearance: none; background: transparent; border: 0; cursor: pointer;
+  font: inherit; font-weight: 800; color: inherit; padding: 2px 4px; border-radius: var(--r-sm);
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
+.clm-date:hover, .clm-date:focus-visible { background: var(--accent-soft); color: var(--accent); outline: none; }
+
+/* per-week theme-colour swatch in the card head (opens the colour picker) */
+.clm-swatch { appearance: none; flex: none; width: 20px; height: 20px; padding: 0;
+  border: 1px solid var(--border); border-radius: 50%; cursor: pointer;
+  background: var(--surface); display: inline-flex; align-items: center; justify-content: center;
+  color: var(--text-3); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.35);
+  transition: transform var(--dur) var(--ease), border-color var(--dur) var(--ease); }
+.clm-swatch:hover, .clm-swatch:focus-visible { transform: scale(1.12); border-color: var(--accent); outline: none; }
+
+/* colour picker — a wrap-friendly row of preset pastels */
+.tint-presets { display: flex; flex-wrap: wrap; gap: 8px; }
+.tint-swatch { appearance: none; width: 30px; height: 30px; padding: 0; cursor: pointer;
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  transition: transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
+.tint-swatch:hover, .tint-swatch:focus-visible { transform: scale(1.1); outline: none; }
+.tint-swatch.sel { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent); }
+
+/* insert-between affordance — a thin hover-reveal rule with a centred + button */
+.clm-insert { position: relative; height: 8px; margin: -4px 0; display: flex; align-items: center; justify-content: center;
+  cursor: pointer; opacity: 0; transition: opacity var(--dur) var(--ease); }
+.clm-insert:hover, .clm-insert:focus-visible { opacity: 1; outline: none; }
+.clm-insert::before { content: ""; position: absolute; left: 10px; right: 10px; height: 2px;
+  background: var(--accent); border-radius: 2px; opacity: 0.35; }
+.clm-insert-btn { position: relative; z-index: 1; display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; border-radius: 50%; background: var(--accent); color: var(--accent-contrast); }
+
+/* MOBILE (<=760px): each week card fills the viewport width in the horizontal
+   scroller, with a slightly smaller font so portions fit without ugly wrapping. */
+@media (max-width: 760px) {
+  .clm-week { font-size: var(--fs-xs); }
+  .clm-line, .clm-part { font-size: var(--fs-xs); }
+  .clm-line { grid-template-columns: 64px 1fr; }
+  .clm-part { grid-template-columns: 18px 50px 1fr 20px; }
+  .wk-thumb { width: 40px; height: 40px; }
+}

@@ -39,6 +39,7 @@ export function buildClmHtml(weeks, { congName, month, lang, name, pubs, notes, 
       return {
         date: fmtDate(w.date, lang),
         image: w.image,
+        tint: w.tint,   // per-week theme colour → clmTemplate honours w.tint first
         chairman: disp(w.chairman),
         openingPrayer: disp(w.openingPrayer),
         closingPrayer: disp(w.closingPrayer),

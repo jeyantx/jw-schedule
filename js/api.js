@@ -53,7 +53,7 @@ export const api = {
   createCongregation: (name) => request("POST", "/congregations", { name }),
   getCongregation: (id) => request("GET", `/congregations/${id}`),
   listAccess: (id) => request("GET", `/congregations/${id}/access`),
-  grantAccess: (id, email, permissions) => request("POST", `/congregations/${id}/access`, { email, permissions }),
+  grantAccess: (id, email, permissions, nameEn) => request("POST", `/congregations/${id}/access`, { email, permissions, nameEn }),
   revokeAccess: (id, targetEmail) => request("DELETE", `/congregations/${id}/access?targetEmail=${encodeURIComponent(targetEmail)}`),
   // wol.jw.org HTML proxy — returns the raw page text (raw mode → Response).
   wolFetch: async (path) => (await request("GET", `/wol/fetch?path=${encodeURIComponent(path)}`, undefined, { raw: true })).text(),

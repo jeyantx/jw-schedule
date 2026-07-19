@@ -158,3 +158,15 @@ table.tbl tbody tr.ghost td:first-child { font-style: italic; }
 }
 @media (min-width: 901px) { .scrim { display: none !important; } }
 @media (max-width: 760px) { .dash-2 { grid-template-columns: 1fr !important; } .grid-cards { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); } }
+
+/* Settings: on narrow screens stack the multi-column select/input rows into a
+   single comfortable column, let chip groups wrap, and go full-width. */
+@media (max-width: 760px) {
+  .settings-view .card-pad { padding: var(--sp-4); }
+  .settings-view .row.wrap { gap: 12px !important; }
+  .settings-view .row.wrap > .field.grow { flex: 1 1 100%; min-width: 0; }
+  .settings-view .field[style*="max-width"] { max-width: none !important; }
+  .settings-view .field > .select,
+  .settings-view .field > .input { width: 100%; }
+  .settings-view .row.wrap .chip { flex: 0 0 auto; }
+}

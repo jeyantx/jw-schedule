@@ -16,6 +16,7 @@ class Store {
     this.congId = null;
     this.congregation = null;
     this.permissions = {};
+    this.memberNameEn = null;   // signed-in member's English name (from their access record)
     this.docs = {};             // kind -> parsed document
     this.sync = "online";       // online | saving | offline | error
     this._subs = new Set();
@@ -63,6 +64,9 @@ class Store {
     const m = this.memberships.find((x) => String(x.congregation.id) === this.congId);
     this.congregation = m ? m.congregation : (await api.getCongregation(id));
     this.permissions = m ? m.permissions : {};
+    // The signed-in member's English name (from their access record), used to map
+    // them to a publisher so the dashboard can show their own assignments.
+    this.memberNameEn = (m && m.nameEn) || null;
     await this._loadDocs();
     this._emit();
   }
