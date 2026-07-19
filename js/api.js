@@ -57,6 +57,20 @@ export const api = {
   revokeAccess: (id, targetEmail) => request("DELETE", `/congregations/${id}/access?targetEmail=${encodeURIComponent(targetEmail)}`),
   // wol.jw.org HTML proxy — returns the raw page text (raw mode → Response).
   wolFetch: async (path) => (await request("GET", `/wol/fetch?path=${encodeURIComponent(path)}`, undefined, { raw: true })).text(),
+  // Async batch: submit up to 20 paths → {jobId, total}; the backend fetches them
+  // on a background thread (surviving the ~60s request cap). Poll wolBatchStatus.
+  wolBatch: (paths) => request("POST", "/wol/batch", { paths }),
+  // Poll a batch → {done,total,finished,errors, results (bodies) once finished}.
+  // A 410 (ApiError.status===410) means the instance restarted → caller resubmits.
+  wolBatchStatus: (jobId) => request("GET", `/wol/batch/${encodeURIComponent(jobId)}`),
+  // wol image proxy → a Blob (used to embed thumbnails as data: URIs at export,
+  // since the remote PDF renderer can't hotlink wol thumbnails). `path` is the
+  // part after wol.jw.org (a full https://wol.jw.org/... URL is accepted too).
+  wolImage: async (path) => {
+    const p = String(path).replace(/^https?:\/\/wol\.jw\.org\//i, "");
+    const res = await request("GET", `/wol/image?path=${encodeURIComponent(p)}`, undefined, { raw: true, timeout: 60000 });
+    return res.blob();
+  },
   getAllData: (id) => request("GET", `/congregations/${id}/data`),
   getData: (id, kind) => request("GET", `/congregations/${id}/data/${kind}`),
   putData: (id, kind, doc) => request("PUT", `/congregations/${id}/data/${kind}`, doc),

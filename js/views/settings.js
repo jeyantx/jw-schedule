@@ -30,15 +30,31 @@ export function renderSettings() {
     langChoice("en", "English"),
     langChoice("mixed", "Mixed — English app · தமிழ் அட்டவணை"));
 
-  const themeBtn = el("button", { class: "btn", onClick: () => {
-    const cur = document.documentElement.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
-    const next = cur === "dark" ? "light" : "dark"; document.documentElement.dataset.theme = next; localStorage.setItem("jw_theme", next);
-  } }, icon("moon", 16), t("theme"));
+  // Theme: three explicit modes (light / dark / auto). Mechanism mirrors app.js
+  // — persist jw_theme and set the resolved data-theme on <html>; the OS-change
+  // listener installed at boot keeps "auto" live.
+  const themeMode = () => localStorage.getItem("jw_theme") || "auto";
+  const setThemeMode = (mode) => {
+    localStorage.setItem("jw_theme", mode);
+    const dark = mode === "dark" || (mode === "auto" && matchMedia("(prefers-color-scheme: dark)").matches);
+    document.documentElement.dataset.theme = dark ? "dark" : "light";
+    S.refresh && S.refresh(); // re-render to move the active highlight
+  };
+  const themeChoice = (mode, ic, label) => el("button", {
+    class: `chip ${themeMode() === mode ? "accent" : ""}`, type: "button",
+    style: { display: "inline-flex", gap: "7px", alignItems: "center", padding: "8px 12px" },
+    onClick: () => { if (themeMode() !== mode) setThemeMode(mode); },
+  }, icon(ic, 16), label);
+  const isTa = lang === "ta";
+  const themeModeRow = el("div", { class: "row wrap", style: { gap: "8px" } },
+    themeChoice("light", "sun", isTa ? "வெளிச்சம்" : "Light"),
+    themeChoice("dark", "moon", isTa ? "இருள்" : "Dark"),
+    themeChoice("auto", "settings", isTa ? "தானியங்கி (கணினி)" : "Auto (system)"));
 
   const prefCard = el("div", { class: "card card-pad" },
     el("div", { class: "side-group", style: { padding: "0 0 10px" } }, `${t("language")} · ${t("theme")}`),
     el("div", { class: "field" }, el("label", {}, t("language")), langRow),
-    el("div", { class: "row wrap", style: { marginTop: "10px" } }, themeBtn));
+    el("div", { class: "field", style: { marginTop: "10px" } }, el("label", {}, t("theme")), themeModeRow));
 
   const exportBtn = el("button", { class: "btn", onClick: doExport }, icon("download", 16), "Export backup");
   const importInput = el("input", { type: "file", accept: "application/json", style: { display: "none" }, onchange: doImport });

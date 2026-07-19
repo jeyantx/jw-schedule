@@ -26,7 +26,7 @@ const L = (ta, en) => (lang() === "ta" ? ta : en);
 export const sheetPrefs = () => ({
   theme: "light-1", cleaningFormat: "parts", attendantFormat: "2",
   midweekDay: 3, weekendDay: 0, fsmDay: 6, // meeting weekdays (0=Sun..6=Sat)
-  weekendExportMonths: 2, // public-talk board span: 1 | 2 | 3 months
+  weekendExportMonths: 3, // public-talk board span: 1 | 2 | 3 months
   ...((store.get("meta") || {}).sheet || {}),
 });
 export function boardTheme(prefs = sheetPrefs()) {

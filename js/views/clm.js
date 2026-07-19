@@ -3,6 +3,7 @@
 // + qualification highlighting and one-click PDF export via the backend.
 // ============================================================================
 import { store, uid } from "../store.js";
+import { api } from "../api.js";
 import { CLM_SECTIONS, ROLES } from "../config.js";
 import { getLang, getContentLang, t, tc } from "../i18n.js";
 import { el, icon, toast, combo, confirmDialog, drawer, modal } from "../ui.js";
@@ -16,6 +17,36 @@ import { assetDataUri } from "../features/assets.js";
 import { clmIcon } from "../features/clmIcons.js";
 
 let editing = null; // { weekId, path, type }
+// BUG 6: one auto-fill at a time. Module-level so the flag survives re-renders;
+// the auto-fill buttons render disabled and the actions no-op while it is set.
+let autofillRunning = false;
+// BUG 9: the remote PDF/image renderer can't hotlink wol thumbnails, so at export
+// each week's wol image is fetched through the proxy and embedded as a data: URI.
+// Cached per session (keyed by the wol URL) so repeat exports don't re-fetch.
+const _imgUriCache = new Map(); // wol image URL -> Promise<dataUri | "">
+function wolImageDataUri(url) {
+  if (!url) return Promise.resolve("");
+  if (_imgUriCache.has(url)) return _imgUriCache.get(url);
+  const p = api.wolImage(url)
+    .then((blob) => new Promise((resolve) => {
+      const fr = new FileReader();
+      fr.onload = () => resolve(String(fr.result || ""));
+      fr.onerror = () => resolve("");
+      fr.readAsDataURL(blob);
+    }))
+    .catch(() => "");   // fetch failed → "" → template renders no image cell content
+  _imgUriCache.set(url, p);
+  return p;
+}
+// Return clones of the weeks with each wol image URL swapped for an embedded data
+// URI (or removed on failure — the frozen template renders nothing for a falsy image).
+async function embedWeekImages(weeks) {
+  return Promise.all((weeks || []).map(async (w) => {
+    if (!w.image) return w;
+    const uri = await wolImageDataUri(w.image);
+    return { ...w, image: uri || undefined };
+  }));
+}
 // Ministry-portion type codes (apply section) — feed the Student Portions matrix.
 export const PORTION_TYPES = ["SC", "FU", "MD", "EB", "T"];
 
@@ -70,7 +101,9 @@ export function renderClm() {
   const dupBtn = el("button", { class: "btn", onClick: duplicateLast }, icon("copy", 16), t("duplicate"));
   const helperBtn = el("button", { class: "btn", onClick: openHelper }, icon("userCheck", 16), t("helper"));
   const imgBtn = el("button", { class: "btn", onClick: loadImages }, icon("calendar", 16), t("images"));
-  const autoBtn = el("button", { class: "btn", onClick: autoFillMonth }, icon("globe", 16), t("autoFillMonth"));
+  const autoBtn = el("button", { class: "btn", disabled: autofillRunning,
+    onClick: () => { if (autofillRunning) return toast(L("ஏற்கனவே இயங்குகிறது", "Already running"), "danger"); autoFillMonth(); } },
+    icon("globe", 16), t("autoFillMonth"));
   const pdfBtn = el("button", { class: "btn", onClick: doExport }, icon("share", 16), lang === "ta" ? "ஏற்றுமதி" : "Export");
 
   const toolbar = el("div", { class: "clm-toolbar" },
@@ -293,14 +326,14 @@ export function renderClm() {
 
   function doExport() {
     exportMenu({
-      getHtml: async () => buildClmHtml(weeks, { congName: store.congregation?.name || "", month: S.month, lang: clang, name: pubName, pubs, ...(await clmPrefs()) }),
+      getHtml: async () => buildClmHtml(await embedWeekImages(weeks), { congName: store.congregation?.name || "", month: S.month, lang: clang, name: pubName, pubs, ...(await clmPrefs()) }),
       filename: `clm-${monthName(S.month, "en").replace(" ", "-").toLowerCase()}`,
       landscape: true, title: `${t("clm")} — ${monthName(S.month, lang)}`,
     });
   }
   function doExportWeek(w) {
     exportMenu({
-      getHtml: async () => buildClmWeekHtml(w, { lang: clang, name: pubName, pubs, ...(await clmPrefs()) }),
+      getHtml: async () => buildClmWeekHtml((await embedWeekImages([w]))[0], { lang: clang, name: pubName, pubs, ...(await clmPrefs()) }),
       filename: `clm-week-${w.date}`,
       landscape: false, title: `${t("clm")} — ${fmtDate(w.date, lang)}`,
     });
@@ -434,7 +467,9 @@ export function renderClm() {
   }
 
   async function autoFillWeek(date) {
+    if (autofillRunning) return toast(L("ஏற்கனவே இயங்குகிறது", "Already running"), "danger");
     if (store.get("clm").some((w) => w.date === date)) return toast(L("இந்த வாரம் ஏற்கெனவே உள்ளது", "Week exists"), "danger");
+    autofillRunning = true; S.refresh();   // re-render → auto-fill buttons show disabled
     const tst = toast(L("wol.jw.org இலிருந்து ஏற்றுகிறது…", "Fetching from wol.jw.org…"), "", { persist: true });
     try {
       const { weeks, hasMemorial } = await fetchMonthPrograms(S.month, "en");
@@ -443,6 +478,8 @@ export function renderClm() {
       else tst.update(r.msg, "danger");
     } catch (e) {
       tst.update(L("தானாக நிரப்ப முடியவில்லை: ", "Auto-fill failed: ") + (e.message || ""), "danger");
+    } finally {
+      autofillRunning = false; S.refresh();
     }
   }
 
@@ -450,12 +487,20 @@ export function renderClm() {
   // Existing weeks are never overwritten; skipped weeks (memorial/unpublished)
   // are counted and reported.
   async function autoFillMonth() {
+    if (autofillRunning) return toast(L("ஏற்கனவே இயங்குகிறது", "Already running"), "danger");
     const existing = store.get("clm").map((w) => w.date);
     const dates = pendingWeekDates(existing, kindMeetingDays("clm").flatMap((wd) => monthDates(wd)));
     if (!dates.length) return toast(L("சேர்க்க வேண்டிய வாரங்கள் இல்லை", "No missing weeks to add"), "danger");
+    autofillRunning = true; S.refresh();   // re-render → auto-fill buttons show disabled
     const tst = toast(L("wol.jw.org இலிருந்து ஏற்றுகிறது…", "Fetching from wol.jw.org…"), "", { persist: true });
     try {
-      const { weeks, hasMemorial } = await fetchMonthPrograms(S.month, "en");
+      // prefetchDocs batches every week's doc page through the background job
+      // (survives Catalyst's ~60s request cap); onProgress drives the "3/9 …" toast.
+      const { weeks, hasMemorial } = await fetchMonthPrograms(S.month, "en", {
+        prefetchDocs: true,
+        onProgress: (done, total) =>
+          tst.update(L(`${done}/${total} ஏற்றுகிறது…`, `Loading ${done}/${total}…`), "", { persist: true }),
+      });
       let created = 0, skipped = 0, memorial = 0;
       for (const d of dates) {
         if (store.get("clm").some((w) => w.date === d)) { skipped++; continue; } // never overwrite
@@ -468,6 +513,8 @@ export function renderClm() {
         `${created} weeks pre-filled · ${skipped} skipped${note}`), created ? "ok" : "danger");
     } catch (e) {
       tst.update(L("தானாக நிரப்ப முடியவில்லை: ", "Auto-fill failed: ") + (e.message || ""), "danger");
+    } finally {
+      autofillRunning = false; S.refresh();
     }
   }
 }

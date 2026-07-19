@@ -21,16 +21,41 @@ import { renderPortions } from "./views/portions.js";
 const root = document.getElementById("app");
 
 /* ---- theme -------------------------------------------------------------- */
-function initTheme() {
-  const saved = localStorage.getItem("jw_theme");
-  if (saved) document.documentElement.dataset.theme = saved;
+// Three modes cycle: light → dark → auto. "auto" follows the OS preference and
+// re-applies live. New users default to "auto". The applied mechanism is the
+// existing one: an explicit data-theme="light|dark" on <html> (tokens.css keys
+// off it), resolved from the mode here so "auto" stays in sync with the system.
+const THEME_MODES = ["light", "dark", "auto"];
+const themeMode = () => localStorage.getItem("jw_theme") || "auto";
+function applyTheme() {
+  const mode = themeMode();
+  const dark = mode === "dark" || (mode === "auto" && matchMedia("(prefers-color-scheme: dark)").matches);
+  document.documentElement.dataset.theme = dark ? "dark" : "light";
 }
-function toggleTheme() {
-  const cur = document.documentElement.dataset.theme
-    || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
-  const next = cur === "dark" ? "light" : "dark";
-  document.documentElement.dataset.theme = next;
+function initTheme() {
+  applyTheme();
+  // Live-follow the OS while in "auto".
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+    if (themeMode() === "auto") applyTheme();
+  });
+}
+function cycleTheme() {
+  const next = THEME_MODES[(THEME_MODES.indexOf(themeMode()) + 1) % THEME_MODES.length];
   localStorage.setItem("jw_theme", next);
+  applyTheme();
+  labelThemeBtn();
+}
+function themeModeLabel() {
+  const ta = getLang() === "ta";
+  const names = ta ? { light: "வெளிச்சம்", dark: "இருள்", auto: "தானியங்கி" } : { light: "Light", dark: "Dark", auto: "Auto" };
+  return `${t("theme")}: ${names[themeMode()]}`;
+}
+const themeModeIcon = () => (themeMode() === "light" ? "sun" : "moon");
+let themeBtnEl = null;
+function labelThemeBtn() {
+  if (!themeBtnEl) return;
+  themeBtnEl.title = themeModeLabel();
+  themeBtnEl.replaceChildren(icon(themeModeIcon(), 18));
 }
 
 /* ---- nav definition ----------------------------------------------------- */
@@ -79,13 +104,24 @@ initTheme();
 // Language switch calls location.reload(), so setting this once at boot covers
 // both initial load and post-switch.
 document.documentElement.lang = getLang();
-boot();
+// boot() is invoked at the END of this module: it synchronously reaches
+// loadingScreen(), which assigns the `let bootStatusEl` declared further down —
+// calling it here would hit the temporal dead zone and silently break boot.
 
 async function boot() {
+  registerServiceWorker();
   if (!store.email) return mount(root, renderLogin(onAuthed));
   await afterAuth();
 }
 function onAuthed() { afterAuth(); }
+
+// Network-first service worker (sw.js) for offline code-asset support + daily
+// cache invalidation. Registered with a RELATIVE path so the GitHub Pages
+// subpath scopes it correctly. Never let a SW error break boot.
+function registerServiceWorker() {
+  if (!("serviceWorker" in navigator)) return;
+  try { navigator.serviceWorker.register("sw.js").catch(() => {}); } catch (e) { /* ignore */ }
+}
 
 async function afterAuth() {
   mount(root, loadingScreen());
@@ -96,15 +132,34 @@ async function afterAuth() {
     toast(e.message || "Could not reach server", "danger");
   }
   if (!store.memberships.length) return mount(root, renderCongPicker(afterAuth));
+  setBootStatus(bootMsg("cong"));
   const last = localStorage.getItem("jw_cong");
   const pick = store.memberships.find((m) => String(m.congregation.id) === last) || store.memberships[0];
+  setBootStatus(bootMsg("schedules"));
   await store.selectCongregation(pick.congregation.id);
   renderShell();
 }
 
+/* ---- branded loading screen with live boot status ----------------------- */
+let bootStatusEl = null;
+function setBootStatus(msg) { if (bootStatusEl) bootStatusEl.textContent = msg; }
+function bootMsg(stage) {
+  const ta = getLang() === "ta"; // getLang() already maps "mixed" → English chrome
+  const M = {
+    signin: ta ? "உள்நுழைகிறது…" : "Signing in…",
+    cong: ta ? "சபை ஏற்றுகிறது…" : "Loading congregation…",
+    schedules: ta ? "அட்டவணைகள் ஏற்றுகிறது…" : "Loading schedules…",
+  };
+  return M[stage] || "";
+}
 function loadingScreen() {
+  bootStatusEl = el("span", {}, bootMsg("signin"));
   return el("div", { class: "center", style: { height: "100dvh" } },
-    el("div", { class: "row" }, icon("clock", 22), el("span", { class: "muted" }, "Loading…")));
+    el("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: "14px", textAlign: "center" } },
+      el("img", { src: "assets/icon.png", alt: "", style: { width: "56px", height: "56px", borderRadius: "14px" } }),
+      el("div", { style: { fontWeight: 800, fontSize: "var(--fs-lg)" } }, t("app")),
+      el("div", { class: "row", style: { gap: "9px", color: "var(--text-3)", fontSize: "var(--fs-sm)" } },
+        el("span", { class: "spinner" }), bootStatusEl)));
 }
 
 /* ---- shell -------------------------------------------------------------- */
@@ -149,7 +204,8 @@ function buildSidebar() {
   });
   mount(els.sidebar,
     el("div", { class: "side-brand" },
-      el("div", { class: "mark" }, icon("calendar", 20)),
+      el("div", { class: "mark", style: { background: "transparent", padding: 0 } },
+        el("img", { src: "assets/icon.png", alt: "", style: { width: "34px", height: "34px", borderRadius: "var(--r-md)" } })),
       el("div", {}, el("div", { class: "name" }, t("app")), el("div", { class: "sub" }, t("tagline")))),
     nav);
 }
@@ -166,7 +222,8 @@ function buildTopbar() {
   const sync = el("div", { class: "sync-dot hide-sm", id: "syncDot" }, el("span", { class: "d" }), el("span", { class: "txt" }, t("saved")));
 
   const langBtn = el("button", { class: "btn btn-icon btn-ghost btn-sm", title: t("language"), onClick: () => { setLang(getLang() === "ta" ? "en" : "ta"); location.reload(); } }, icon("globe", 18));
-  const themeBtn = el("button", { class: "btn btn-icon btn-ghost btn-sm", title: t("theme"), onClick: toggleTheme }, icon("moon", 18));
+  const themeBtn = el("button", { class: "btn btn-icon btn-ghost btn-sm", title: themeModeLabel(), onClick: cycleTheme }, icon(themeModeIcon(), 18));
+  themeBtnEl = themeBtn;
   const userBtn = el("button", { class: "avatar", title: store.email, onClick: openUserMenu }, (store.email || "?")[0].toUpperCase());
   const hamburger = el("button", { class: "btn btn-icon btn-ghost hamburger", onClick: () => toggleSidebar(), "aria-label": "Menu" }, icon("menu"));
 
@@ -247,6 +304,13 @@ function openUserMenu() {
   import("./ui.js").then(({ modal }) => {
     const { close } = modal({ title: store.email, body: el("div", {},
       el("p", { class: "hint", style: { marginBottom: "12px" } }, store.isOwner() ? t("owner") : ""),
-      el("button", { class: "btn btn-danger", style: { width: "100%" }, onClick: () => { store.signOut(); location.hash = ""; location.reload(); } }, icon("logout", 16), t("signOut"))) });
+      el("button", { class: "btn btn-danger", style: { width: "100%" }, onClick: async () => {
+        store.signOut(); location.hash = "";
+        // Drop every cached code asset so login lands on the freshest UI.
+        try { if ("caches" in window) { const ks = await caches.keys(); await Promise.all(ks.map((k) => caches.delete(k))); } } catch (e) { /* ignore */ }
+        location.reload();
+      } }, icon("logout", 16), t("signOut"))) });
   });
 }
+
+boot();

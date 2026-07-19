@@ -4,7 +4,7 @@
 import { store, uid } from "../store.js";
 import { getLang, getContentLang, t, tc } from "../i18n.js";
 import { el, icon, toast, modal, combo, confirmDialog } from "../ui.js";
-import { S, inMonth, monthName, monthRangeLabel, fmtDate, monthDates } from "../state.js";
+import { S, monthName, monthRangeLabel, fmtDate, monthDates } from "../state.js";
 import { weekendBoardHtml, weeklyCardHtml, kindMeetingDays, pubLabel, sheetPrefs } from "../features/boards.js";
 import { exportMenu } from "../features/pdf.js";
 
@@ -15,16 +15,35 @@ export function renderWeekend() {
   const pubs = store.get("publishers");
   const pubName = (id) => { const p = pubs.find((x) => x.id === id); return p ? pubLabel(p, clang) : (id || ""); };
 
-  const rows = store.get("weekend").filter((w) => inMonth(w.date)).sort((a, b) => (a.date || "").localeCompare(b.date || ""));
-  // ghost rows: every weekend date of the month is laid out even when unsaved
-  const ghostDates = kindMeetingDays("weekend").flatMap((wd) => monthDates(wd)).filter((d) => !rows.some((r) => r.date === d));
+  // The on-screen table spans the congregation's configured public-talk window
+  // (1–3 months), starting at the current app month, so 3 months stay readable
+  // and editable at once. The exported board reuses the same rows.
+  const span = sheetPrefs().weekendExportMonths || 3;
+  const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const months = Array.from({ length: span }, (_, i) => new Date(S.month.getFullYear(), S.month.getMonth() + i, 1));
+  const spanFrom = iso(months[0]);
+  const spanTo = iso(new Date(S.month.getFullYear(), S.month.getMonth() + span, 0));
+
+  const rows = store.get("weekend").filter((w) => w.date && w.date >= spanFrom && w.date <= spanTo)
+    .sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+  // ghost rows: every weekend date across the whole span is laid out even when unsaved
+  const ghostDates = [...new Set(months.flatMap((m) => kindMeetingDays("weekend").flatMap((wd) => monthDates(wd, m))))]
+    .filter((d) => !rows.some((r) => r.date === d));
   const lines = [
     ...rows.map((w) => ({ date: w.date || "", rec: w })),
     ...ghostDates.map((d) => ({ date: d, rec: null })),
   ].sort((a, b) => a.date.localeCompare(b.date));
 
   const tbody = el("tbody");
+  let dividerMonth = null; // insert a muted month-name divider row when the month changes
   lines.forEach(({ date, rec: w }) => {
+    const ym = (date || "").slice(0, 7);
+    if (ym && ym !== dividerMonth) {
+      dividerMonth = ym;
+      tbody.append(el("tr", { class: "month-divider" },
+        el("td", { colspan: 6, class: "muted", style: { padding: "10px 8px 4px", fontWeight: 700, fontSize: "var(--fs-xs)", textTransform: "uppercase", letterSpacing: "0.04em" } },
+          monthName(new Date(date + "T00:00:00"), clang))));
+    }
     if (!w) {
       tbody.append(el("tr", { class: `ghost ${canEdit ? "row-click" : ""}`, onClick: canEdit ? () => openEditor(null, date) : null },
         el("td", {}, fmtDate(date, clang)),
@@ -51,15 +70,9 @@ export function renderWeekend() {
       el("th", {}, clang === "ta" ? "நடத்துபவர்" : "WT Conductor"), el("th", {}, tc("reader")), el("th", {}, ""))), tbody))
     : el("div", { class: "empty" }, icon("calendar", 40), el("p", {}, monthName(S.month, lang)), canEdit ? el("p", { class: "hint" }, `${t("add")} ↑`) : null);
 
-  // The printed public-talk board spans 1–3 months (per congregation pref),
-  // starting at the current app month. Gather rows across the whole span by
-  // date range (the on-screen table above stays current-month only).
-  const span = sheetPrefs().weekendExportMonths || 2;
-  const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  const spanFrom = iso(new Date(S.month.getFullYear(), S.month.getMonth(), 1));
-  const spanTo = iso(new Date(S.month.getFullYear(), S.month.getMonth() + span, 0));
-  const spanRows = store.get("weekend").filter((w) => w.date && w.date >= spanFrom && w.date <= spanTo)
-    .sort((a, b) => a.date.localeCompare(b.date));
+  // The printed public-talk board reuses the same span of saved rows gathered
+  // above (real records only — ghosts are UI placeholders).
+  const spanRows = rows;
   const lastRow = spanRows[spanRows.length - 1];
   // Printed on the board (schedule content) → content language.
   const spanLabel = monthRangeLabel(S.month, lastRow ? new Date(lastRow.date + "T00:00:00") : S.month, clang);

@@ -12,7 +12,9 @@ import { fileURLToPath } from "node:url";
 const {
   parseWeekProgram, isMemorialPage, parseMonthWeeks, matchWeek,
   pendingWeekDates, tamilDocPath, workbookMonthPath,
+  assembleBatch, fetchMonthPrograms, fetchWeekImages, matchWeekImage,
 } = await import("../js/features/wol.js");
+const { api } = await import("../js/api.js");
 
 const fx = (name) => readFileSync(join(dirname(fileURLToPath(import.meta.url)), "fixtures", name), "utf8");
 const EN16 = fx("clm-week-en-jeremiah16.html");   // July 13-19: SC/FU/MD week
@@ -112,4 +114,46 @@ test("workbookMonthPath: bimonthly cover month — Aug→july page, Apr→march 
   assert.match(workbookMonthPath(new Date(2026, 7, 12), "en"), /2026\/july$/);
   assert.match(workbookMonthPath(new Date(2026, 3, 8), "en"), /2026\/march$/);
   assert.match(workbookMonthPath(new Date(2026, 6, 1), "en"), /2026\/july$/); // cover month unchanged
+});
+
+// --- batch result assembly (pure) ----------------------------------------
+test("assembleBatch: splits requested paths into fetched bodies vs failures", () => {
+  const { bodies, failed } = assembleBatch(["a", "b", "c"], { a: "<A>", b: "<B>" }, { c: "timed out" });
+  assert.deepEqual(bodies, { a: "<A>", b: "<B>" });
+  assert.deepEqual(failed, ["c"]);
+});
+
+test("assembleBatch: empty request + a path in neither map counts as failed", () => {
+  assert.deepEqual(assembleBatch([], {}, {}), { bodies: {}, failed: [] });
+  assert.deepEqual(assembleBatch(["x"]).failed, ["x"]);   // no results/errors given → failed
+});
+
+// --- BUG 5: image lookup merges the PREVIOUS cover page (fixture-based) ----
+// July 2026's cover page starts at "July 6-12" — the leading "June 29–July 5"
+// week lives on the May–June cover. A July-1 date must resolve to it, both for
+// the auto-thumbnail weeks (fetchMonthPrograms) and the Images button
+// (fetchWeekImages + matchWeekImage), instead of coming back empty.
+test("BUG 5: July-1 date matches the June 29–July 5 week from the previous cover", async () => {
+  const july = `
+    <a href="/en/wol/d/r1/lp-e/700006"><img src="/mediaitems/jul6.jpg">July 6-12</a>
+    <a href="/en/wol/d/r1/lp-e/700013"><img src="/mediaitems/jul13.jpg">July 13-19</a>`;
+  const may = `
+    <a href="/en/wol/d/r1/lp-e/600622"><img src="/mediaitems/jun22.jpg">June 22-28</a>
+    <a href="/en/wol/d/r1/lp-e/600629"><img src="/mediaitems/jun29.jpg">June 29–July 5</a>`;
+  const orig = api.wolFetch;
+  api.wolFetch = async (path) =>
+    path.includes("/july") ? july : path.includes("/may") ? may : "";
+  try {
+    const { weeks } = await fetchMonthPrograms(new Date(2026, 6, 1), "en");
+    assert.ok(weeks.some((w) => w.start === "2026-06-29"), "merged week must be present");
+    const hit = matchWeek(weeks, "2026-07-01");
+    assert.equal(hit.start, "2026-06-29");
+    assert.equal(hit.range, "June 29–July 5");
+    assert.equal(hit.img, "https://wol.jw.org/mediaitems/jun29.jpg");
+    // Images-button flow shares the same merged weeks.
+    const imgWeeks = await fetchWeekImages(new Date(2026, 6, 1), "en");
+    assert.equal(matchWeekImage(imgWeeks, "2026-07-01"), "https://wol.jw.org/mediaitems/jun29.jpg");
+  } finally {
+    api.wolFetch = orig;
+  }
 });

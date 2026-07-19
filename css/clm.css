@@ -10,6 +10,11 @@
 .clm-sub { text-align: center; font-weight: 700; font-size: var(--fs-sm); color: var(--text-3); margin: 2px 0 var(--sp-4); }
 
 .clm-grid { display: grid; gap: var(--sp-3); grid-auto-flow: column; grid-auto-columns: minmax(280px, 1fr); }
+/* On-screen only (inside .clm-scroll): laptops have room, so widen the week
+   columns responsively to stop typical Tamil names wrapping. Horizontal scroll
+   is preserved. The print/PDF template keeps the compact 280px column above. */
+.clm-scroll .clm-grid { grid-auto-columns: minmax(clamp(360px, 30vw, 480px), 1fr); }
+@media (max-width: 760px) { .clm-scroll .clm-grid { grid-auto-columns: minmax(84vw, 1fr); } }
 .clm-week { border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden; background: var(--surface); display: flex; flex-direction: column; }
 .clm-week-head { background: var(--surface-2); padding: 10px; text-align: center; font-weight: 800; font-size: var(--fs-sm); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: center; gap: 8px; }
 

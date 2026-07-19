@@ -63,10 +63,14 @@ export function parseWeekImages(html, monthDate) {
   return out.sort((a, b) => a.start.localeCompare(b.start));
 }
 
-// Fetch + parse the workbook month page for `monthDate` via the backend proxy.
+// Fetch the workbook month's weeks (with thumbnails) via the backend proxy.
+// BUG 5 FIX: this now routes through fetchMonthPrograms, which merges the PREVIOUS
+// cover page — so a July-1 date matches the "June 29–July 5" week carried on the
+// May–June cover, instead of coming back empty. Each week has {start,range,docPath,img}
+// and matchWeekImage works on w.start / w.img just as before.
 export async function fetchWeekImages(monthDate, lang = "en") {
-  const html = await api.wolFetch(workbookMonthPath(monthDate, lang));
-  return parseWeekImages(html, monthDate);
+  const { weeks } = await fetchMonthPrograms(monthDate, lang);
+  return weeks;
 }
 
 // The wol week (from fetchWeekImages) whose Mon–Sun range contains clmDate → its img.
@@ -223,13 +227,99 @@ export function pendingWeekDates(existingDates, candidates) {
 // ---------------------------------------------------------------------------
 // Fetchers (through the backend proxy). A tiny cache dedupes repeat fetches of
 // the same path within a session (month auto-fill hits one month page + N docs).
-const _cache = new Map();
+// Keys are normalized to the backend's path form (no leading slash) so a body
+// fetched via the batch endpoint and one fetched via /wol/fetch share a slot.
+const _cache = new Map();   // normPath -> Promise<string html>
+const norm = (p) => String(p).replace(/^\/+/, "");
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
 async function wolCached(path) {
-  if (_cache.has(path)) return _cache.get(path);
-  const p = api.wolFetch(path).catch((e) => { _cache.delete(path); throw e; });
-  _cache.set(path, p);
+  const key = norm(path);
+  if (_cache.has(key)) return _cache.get(key);
+  const p = api.wolFetch(key).catch((e) => { _cache.delete(key); throw e; });
+  _cache.set(key, p);
   return p;
 }
+
+// Batch-fetch a set of paths through the backend job endpoint, populating _cache.
+// Resolves once every requested path is cached (bodies) or has failed. onProgress
+// (done, total) counts across the WHOLE requested set (already-cached paths count
+// as done), so a re-run reports 100% instantly. Catalyst recycles an idle JVM after
+// ~1 min; a poll that lands on a fresh instance gets a 410 (job map empty) → we
+// transparently RESUBMIT the batch once (most paths are then L2-cache hits upstream
+// and finish fast).
+const BATCH_POLL_MS = 1500;
+const BATCH_MAX_MS = 90000;
+
+// Pure: classify a finished job's requested paths into fetched bodies vs failures.
+// `results`/`errors` are the maps the backend returns; a path present in neither
+// (shouldn't happen for a finished job) is treated as a failure.
+export function assembleBatch(paths, results = {}, errors = {}) {
+  const has = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+  const bodies = {}, failed = [];
+  for (const p of paths || []) {
+    if (has(results, p)) bodies[p] = results[p];
+    else failed.push(p);
+  }
+  return { bodies, failed };
+}
+
+async function batchFetch(paths, onProgress) {
+  const want = [...new Set((paths || []).map(norm))];
+  const missing = [];
+  const deferreds = {};
+  for (const key of want) {
+    if (_cache.has(key)) continue;
+    let resolve, reject;
+    const pr = new Promise((res, rej) => { resolve = res; reject = rej; });
+    pr.catch(() => {});   // a failed-path promise may never be awaited → swallow to avoid warnings
+    _cache.set(key, pr);
+    deferreds[key] = { resolve, reject };
+    missing.push(key);
+  }
+  const total = want.length;
+  const already = total - missing.length;
+  if (onProgress) onProgress(already, total);
+  if (!missing.length) return;
+
+  const submit = async () => {
+    const { jobId } = await api.wolBatch(missing);
+    return jobId;
+  };
+  try {
+    let jobId = await submit();
+    let resubmitted = false;
+    const startedAt = Date.now();
+    for (;;) {
+      await sleep(BATCH_POLL_MS);
+      let st;
+      try {
+        st = await api.wolBatchStatus(jobId);
+      } catch (e) {
+        if (e && e.status === 410 && !resubmitted) { resubmitted = true; jobId = await submit(); continue; }
+        throw e;
+      }
+      if (onProgress) onProgress(already + (st.done || 0), total);
+      if (st.finished) {
+        const errors = st.errors || {};
+        const { bodies, failed } = assembleBatch(missing, st.results, errors);
+        for (const key of Object.keys(bodies)) deferreds[key].resolve(bodies[key]);
+        for (const key of failed) {
+          _cache.delete(key);   // failed path — let a later single fetch retry it
+          deferreds[key].reject(new Error(errors[key] || "wol fetch failed"));
+        }
+        return;
+      }
+      if (Date.now() - startedAt > BATCH_MAX_MS) throw new Error("wol batch timed out");
+    }
+  } catch (e) {
+    for (const key of missing) { _cache.delete(key); deferreds[key].reject(e); }
+    throw e;
+  }
+}
+
+// The doc path in the resolved content language (ta → aligned r122/lp-tl edition).
+const docPathForLang = (docPath, lang) => (lang === "ta" ? tamilDocPath(docPath) : norm(docPath));
 
 // Fetch + parse one week doc. lang "ta" fetches the Tamil edition of the SAME
 // doc (aligned ids, see tamilDocPath) so titles/durations prefill in Tamil;
@@ -254,7 +344,14 @@ export async function fetchWeekProgram(docPath, lang = "en") {
 // Merges the cover page (which spans two months) with the PREVIOUS cover page
 // when a leading week straddles the month boundary (e.g. "June 29–July 5" lives
 // on the May–June page, not the July page). Returns { weeks, hasMemorial }.
-export async function fetchMonthPrograms(monthDate, lang = "en") {
+//
+// The two cover pages are quick single fetches (kept off the batch so a per-week
+// auto-fill stays snappy). With opts.prefetchDocs, every week's doc page is then
+// pulled in ONE background batch job — surviving Catalyst's ~60s request cap —
+// so the subsequent fetchWeekProgram() calls are instant cache hits. opts.onProgress
+// (done, total) is wired to the persistent toast during that doc prefetch.
+export async function fetchMonthPrograms(monthDate, lang = "en", opts = {}) {
+  const { prefetchDocs = false, onProgress } = opts;
   const html = await wolCached(workbookMonthPath(monthDate, lang));
   let weeks = parseMonthWeeks(html, monthDate);
   let hasMemorial = isMemorialPage(html);
@@ -271,6 +368,14 @@ export async function fetchMonthPrograms(monthDate, lang = "en") {
       for (const w of parseMonthWeeks(prevHtml, prevCover)) if (!byStart.has(w.start)) byStart.set(w.start, w);
       weeks = [...byStart.values()].sort((a, b) => a.start.localeCompare(b.start));
     } catch { /* previous cover not published yet — carry on with what we have */ }
+  }
+
+  if (prefetchDocs && weeks.length) {
+    // Best-effort: individual doc failures leave that path uncached (a later single
+    // fetch retries), so never let the batch reject bubble up and abort the month.
+    try {
+      await batchFetch(weeks.map((w) => docPathForLang(w.docPath, lang)), onProgress);
+    } catch { /* fall back to per-week single fetches below */ }
   }
   return { weeks, hasMemorial };
 }
