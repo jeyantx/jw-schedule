@@ -64,12 +64,12 @@ export function renderDashboard() {
 
   const nextMonth = new Date(S.month.getFullYear(), S.month.getMonth() + 1, 1);
 
-  return el("div", { class: "view" },
+  return el("div", { class: "view dash-view" },
     el("div", { class: "view-head" }, el("h2", {}, t("dashboard")), el("p", {}, store.congregation?.name || "")),
     myPortionsCard(),
     el("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }, class: "dash-2" },
       weekCard(t("thisWeek"), weekRange(0)), weekCard(t("nextWeek"), weekRange(1))),
-    el("div", { class: "side-group", style: { padding: "20px 0 4px" } }, ta ? "நிலுவையில் உள்ள அட்டவணைகள்" : "Pending schedules"),
+    el("div", { class: "side-group", style: { padding: "4px 0 0" } }, ta ? "நிலுவையில் உள்ள அட்டவணைகள்" : "Pending schedules"),
     el("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }, class: "dash-2" },
       pendingCard(ta ? "இந்த மாதம்" : "This month", S.month), pendingCard(ta ? "அடுத்த மாதம்" : "Next month", nextMonth)));
 

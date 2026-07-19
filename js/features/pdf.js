@@ -30,13 +30,17 @@ import { getLang, t } from "../i18n.js";
 const IMG_ZOOM = 3;       // 3× rasterisation + clears the 800px height floor for cards
 const IMG_MAX_W = 2400;   // backend viewport clamp (width)
 const IMG_PAD = 6;        // a few px of white on the right so a border is never clipped
+const IMG_CONTENT_PAD = 16; // comfortable white padding around the content, pre-zoom
+                            // (→ ~48px at 3×) so the exported PNG never touches its edges
 
 // Pure string transform (exported for unit tests). Injects an override <style>
-// before </head> and wraps the <body> content in <div id="__imgzoom">.
+// before </head> and wraps the <body> content in <div id="__imgzoom">. The zoom
+// div carries a small padding so the capture has even white space on all four
+// sides (padding is inside the zoomed box → it scales with the zoom factor).
 export function imageWrapHtml(html, zoom = IMG_ZOOM) {
   const css = `<style id="__imgfit">`
     + `html,body{margin:0!important;padding:0!important;background:#fff!important;text-align:left!important}`
-    + `#__imgzoom{zoom:${zoom};display:inline-block;background:#fff}`
+    + `#__imgzoom{zoom:${zoom};display:inline-block;padding:${IMG_CONTENT_PAD}px;background:#fff}`
     + `#__imgzoom>*{margin:0!important}`
     + `</style>`;
   let out = /<\/head>/i.test(html) ? html.replace(/<\/head>/i, css + "</head>") : css + html;
@@ -49,9 +53,11 @@ export function imageWrapHtml(html, zoom = IMG_ZOOM) {
 // Falls to the legacy path (no wrap) when contentWidth is unknown.
 export function imagePlan(html, contentWidth) {
   if (!contentWidth || !(contentWidth > 0)) return { html, width: undefined };
+  // The zoom box lays out at content + padding on both sides, then scales by zoom.
+  const padded = contentWidth + 2 * IMG_CONTENT_PAD;
   let zoom = IMG_ZOOM;
-  let width = Math.round(contentWidth * zoom) + IMG_PAD;
-  if (width > IMG_MAX_W) { width = IMG_MAX_W; zoom = +((IMG_MAX_W - IMG_PAD) / contentWidth).toFixed(4); }
+  let width = Math.round(padded * zoom) + IMG_PAD;
+  if (width > IMG_MAX_W) { width = IMG_MAX_W; zoom = +((IMG_MAX_W - IMG_PAD) / padded).toFixed(4); }
   return { html: imageWrapHtml(html, zoom), width };
 }
 

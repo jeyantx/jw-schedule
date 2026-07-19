@@ -15,8 +15,8 @@ const card = renderBoardCard({
 
 test("imageWrapHtml: injects zoom + margin-reset style into a real template", () => {
   const out = imageWrapHtml(card);
-  // 3× zoom wrapper present
-  assert.match(out, /#__imgzoom\{zoom:3;/);
+  // 3× zoom wrapper present, with comfortable padding on all sides (pre-zoom)
+  assert.match(out, /#__imgzoom\{zoom:3;display:inline-block;padding:16px;background:#fff\}/);
   // page margins / centering neutralised so the full-page capture hugs content
   assert.match(out, /html,body\{margin:0!important;padding:0!important;background:#fff!important/);
   assert.match(out, /#__imgzoom>\*\{margin:0!important\}/);
@@ -33,10 +33,11 @@ test("imageWrapHtml: honours a custom zoom factor", () => {
   assert.match(imageWrapHtml(card, 1.5), /#__imgzoom\{zoom:1.5;/);
 });
 
-test("imagePlan: card content width → 3× viewport width, wrapped html", () => {
+test("imagePlan: card content width → 3× viewport width (incl. padding), wrapped html", () => {
   const p = imagePlan(card, 420);
-  assert.equal(p.width, 420 * 3 + 6);                 // 1266
+  assert.equal(p.width, (420 + 2 * 16) * 3 + 6);      // (420+32)*3+6 = 1362
   assert.match(p.html, /#__imgzoom\{zoom:3;/);
+  assert.match(p.html, /padding:16px/);
 });
 
 test("imagePlan: wide content clamps to 2400 and recomputes a smaller zoom", () => {
@@ -44,7 +45,8 @@ test("imagePlan: wide content clamps to 2400 and recomputes a smaller zoom", () 
   assert.equal(p.width, 2400);
   const z = parseFloat(/#__imgzoom\{zoom:([\d.]+);/.exec(p.html)[1]);
   assert.ok(z > 1 && z < 3, `zoom ${z} between 1 and 3`);
-  assert.ok(Math.round(1840 * z) <= 2400, "scaled content fits the clamp");
+  // the padded content (content + 2×16) scaled by zoom must fit the clamp
+  assert.ok(Math.round((1840 + 2 * 16) * z) <= 2400, "scaled padded content fits the clamp");
 });
 
 test("imagePlan: missing/zero contentWidth → passthrough (legacy path, no wrap)", () => {
