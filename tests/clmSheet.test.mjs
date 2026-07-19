@@ -52,6 +52,13 @@ test("buildClmWeekHtml: fragment — no title row, no notes, one week", () => {
   assert.ok(html.includes("ஏப்ரல் 8, 2026"));
 });
 
+test("notes: a note line round-trips into the sheet's குறிப்பு block (Issue 4)", () => {
+  const html = buildClmHtml([appWeek], { ...opts, notes: ["நினைவு ஆசரிப்பு · ஏப்ரல் 1"] });
+  assert.ok(html.includes('class="note"'));                  // footer notes block emitted
+  assert.ok(html.includes("குறிப்பு:"));                      // note label
+  assert.ok(html.includes("நினைவு ஆசரிப்பு · ஏப்ரல் 1"));     // the note text prints
+});
+
 test("weeks sorted by date regardless of input order", () => {
   const w2 = { ...appWeek, id: "w2", date: "2026-04-01" };
   const html = buildClmHtml([appWeek, w2], opts);

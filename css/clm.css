@@ -18,6 +18,24 @@
 .clm-week { border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden; background: var(--surface); display: flex; flex-direction: column; }
 .clm-week-head { background: var(--surface-2); padding: 10px; text-align: center; font-weight: 800; font-size: var(--fs-sm); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: center; gap: 8px; }
 
+/* Issue 1 — a week's pastel tint (w.tint) is painted as the header background.
+   That pastel is always LIGHT, so the theme's own text/icon colours (which are
+   LIGHT in dark mode — including system/auto dark, which sets NO data-theme
+   attribute) become invisible on it. Force a fixed DARK ink on the whole tinted
+   head with a LITERAL colour at higher specificity: this beats the var(--text)-
+   based defaults in every theme (light, explicit dark, AND system dark) and at
+   every breakpoint, without depending on a [data-theme] attribute that auto-dark
+   never sets. Reported on mobile. */
+.clm-week-head.tinted,
+.clm-week-head.tinted .clm-date,
+.clm-week-head.tinted .btn { color: #1f2937; }
+.clm-week-head.tinted .btn i,
+.clm-week-head.tinted .clm-date i { color: #1f2937; }        /* svg stroke=currentColor */
+.clm-week-head.tinted .clm-date:hover, .clm-week-head.tinted .clm-date:focus-visible,
+.clm-week-head.tinted .btn:hover, .clm-week-head.tinted .btn:focus-visible {
+  color: #1f2937; background: rgba(0, 0, 0, 0.06); }
+.clm-week-head.tinted .muted, .clm-week-head.tinted .hint { color: rgba(31, 41, 55, 0.72); }
+
 .clm-line { display: grid; grid-template-columns: 74px 1fr; gap: 8px; align-items: center; padding: 6px 10px; border-bottom: 1px solid var(--border); font-size: var(--fs-sm); }
 .clm-line .lbl { color: var(--text-3); font-weight: 600; font-size: var(--fs-xs); }
 
@@ -48,6 +66,31 @@
 .clm-week.ghost .ghost-add { flex: 1; min-height: 120px; display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--text-3); font-weight: 600; font-size: var(--fs-sm); }
 .clm-week.ghost:hover, .clm-week.ghost:focus-visible { border-color: var(--accent); }
 .clm-week.ghost:hover .ghost-add, .clm-week.ghost:hover .clm-week-head { color: var(--accent); }
+
+/* ghost "no meeting" dismiss (Issue 3): marks the date memorial/convention so no
+   ghost/auto-fill week is created for it. */
+.clm-week.ghost .clm-week-head { position: relative; }
+.ghost-skip { position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  appearance: none; background: transparent; border: 0; cursor: pointer; padding: 3px;
+  border-radius: var(--r-sm); color: var(--text-3); display: inline-flex; opacity: 0.45;
+  transition: opacity var(--dur) var(--ease), color var(--dur) var(--ease), background var(--dur) var(--ease); }
+.clm-week.ghost:hover .ghost-skip, .ghost-skip:focus-visible { opacity: 1; outline: none; }
+.ghost-skip:hover { color: var(--danger); background: var(--danger-soft); opacity: 1; }
+
+/* skipped (no-meeting) date — a slim muted strip in place of a full ghost card,
+   with a restore (+) action (Issue 3). align-self keeps it short inside the
+   column-flow grid instead of stretching to a full week's height. */
+.clm-skip-strip { align-self: start; display: flex; align-items: center; gap: 6px;
+  padding: 9px 12px; border: 1px dashed var(--border); border-radius: var(--r-md);
+  background: var(--surface-2); color: var(--text-3); font-size: var(--fs-sm); font-weight: 600; }
+.clm-skip-strip .clm-skip-note { font-weight: 500; font-style: italic; }
+
+/* read-only notes preview above the grid (Issue 4) — mirrors what will print. */
+.clm-notes-view { display: flex; flex-wrap: wrap; align-items: baseline; gap: 5px 12px;
+  margin-bottom: var(--sp-4); padding: 9px 12px; border-radius: var(--r-md);
+  background: var(--surface-2); border: 1px solid var(--border); font-size: var(--fs-sm); }
+.clm-notes-view .clm-notes-lbl { font-weight: 700; color: var(--text-2); }
+.clm-notes-view .clm-note-item { color: var(--text-3); }
 
 /* editable cells — display span and swapped-in editor share the same 28px
    footprint so entering/leaving edit mode never shifts the layout */

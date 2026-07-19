@@ -121,6 +121,7 @@ export function renderClm() {
   const colorBtn = el("button", { class: "btn", disabled: autofillRunning,
     onClick: () => { if (autofillRunning) return toast(L("ஏற்கனவே இயங்குகிறது", "Already running"), "danger"); autoColorMonth(); } },
     icon("palette", 16), L("மாதம் வண்ணமிடு", "Auto-color month"));
+  const notesBtn = el("button", { class: "btn", onClick: openNotes }, icon("pencil", 16), L("குறிப்பு", "Notes"));
   const pdfBtn = el("button", { class: "btn", onClick: doExport }, icon("share", 16), lang === "ta" ? "ஏற்றுமதி" : "Export");
 
   const toolbar = el("div", { class: "clm-toolbar" },
@@ -130,16 +131,31 @@ export function renderClm() {
     canEdit ? autoBtn : null,
     canEdit && weeks.length ? imgBtn : null,
     canEdit && weeks.length ? colorBtn : null,
+    canEdit ? notesBtn : null,
     el("div", { class: "grow" }),
     weeks.length ? pdfBtn : null);
 
   /* -- grid: saved weeks + ghost placeholders for the month's midweek dates -- */
-  const ghostDates = canEdit
-    ? kindMeetingDays("clm").flatMap((wd) => monthDates(wd)).filter((d) => !weeks.some((w) => w.date === d))
+  // Skipped dates (memorial / convention) the congregation marked "no meeting".
+  const skip = clmSkipDates();
+  // Expected midweek dates that have no saved week AND no saved week already in
+  // the SAME Mon–Sun calendar week. The second guard fixes Issue 2: after the
+  // midweek default moved Wed→Thu, a saved Wed July 1 week would otherwise sprout
+  // a duplicate Thu July 2 ghost that can't be deleted (ghosts aren't records).
+  const expectedDates = canEdit
+    ? [...new Set(kindMeetingDays("clm").flatMap((wd) => monthDates(wd)))]
+        .filter((d) => !weeks.some((w) => w.date === d || sameIsoWeek(w.date, d)))
+    : [];
+  // A skipped date is a slim "no meeting" strip; the rest are full ghost cards.
+  // A saved week always wins over a skip (skip only suppresses ghosts/auto-fill).
+  const ghostDates = expectedDates.filter((d) => !skip.includes(d));
+  const skipStrips = canEdit
+    ? skip.filter((d) => inMonth(d) && !weeks.some((w) => w.date === d || sameIsoWeek(w.date, d)))
     : [];
   const items = [
     ...weeks.map((w) => ({ date: w.date || "", node: () => weekCard(w) })),
     ...ghostDates.map((d) => ({ date: d, node: () => ghostCard(d) })),
+    ...skipStrips.map((d) => ({ date: d, node: () => skipStrip(d) })),
   ].sort((a, b) => a.date.localeCompare(b.date));
 
   let gridInner;
@@ -152,7 +168,7 @@ export function renderClm() {
   }
 
   const head = el("div", { class: "view-head" }, el("h2", {}, t("clm")), el("p", {}, monthName(S.month, lang)));
-  return el("div", { class: "view" }, head, toolbar, el("div", { class: "clm-scroll" }, gridInner));
+  return el("div", { class: "view" }, head, toolbar, notesStrip(), el("div", { class: "clm-scroll" }, gridInner));
 
   /* ---------- week card ---------- */
   function weekCard(w) {
@@ -163,8 +179,11 @@ export function renderClm() {
 
     const card = el("div", { class: "clm-week" });
     // The week's theme colour tints the header in-app exactly as it will in the
-    // exported sheet (it is already a pale pastel → black text stays readable).
-    card.append(el("div", { class: "clm-week-head", ...(w.tint ? { style: { background: w.tint } } : {}) },
+    // exported sheet (it is a pale pastel). The `tinted` class then forces a fixed
+    // dark ink on the whole head (css/clm.css) so the date/icons stay readable in
+    // BOTH themes — in dark mode the theme text colour is light, which would be
+    // invisible on a light pastel (Issue 1, reported on mobile).
+    card.append(el("div", { class: "clm-week-head" + (w.tint ? " tinted" : ""), ...(w.tint ? { style: { background: w.tint } } : {}) },
       w.image ? el("img", { class: "wk-thumb", src: w.image, alt: "", loading: "lazy" }) : null,
       el("button", { class: "clm-date", type: "button",
         title: lang === "ta" ? "தேதி விருப்பங்கள்" : "Date options",
@@ -201,13 +220,48 @@ export function renderClm() {
   }
 
   // Placeholder for a midweek date with no saved week yet — UI-only (never
-  // exported); one click creates the real blank week for that date.
+  // exported); one click creates the real blank week for that date. The ✕ marks
+  // the date "no meeting" (memorial/convention) instead — Issue 3.
   function ghostCard(date) {
     return el("div", { class: "clm-week ghost", role: "button", tabIndex: 0,
       onClick: () => chooseAdd(date),
       onKeydown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); chooseAdd(date); } } },
-      el("div", { class: "clm-week-head" }, fmtDate(date, clang)),
+      el("div", { class: "clm-week-head" }, fmtDate(date, clang),
+        el("button", { class: "ghost-skip", type: "button",
+          title: L("கூட்டம் இல்லை (நினைவு/மாநாடு)", "No meeting (memorial/convention)"),
+          "aria-label": L("கூட்டம் இல்லை", "No meeting"),
+          onClick: (e) => { e.stopPropagation(); addSkip(date); } }, icon("x", 13))),
       el("div", { class: "ghost-add" }, icon("plus", 16), el("span", {}, t("addWeek"))));
+  }
+
+  // Slim muted strip for a date the congregation marked "no meeting". A restore
+  // (+) action removes it from clmSkip so the ghost card comes back — Issue 3.
+  function skipStrip(date) {
+    return el("div", { class: "clm-skip-strip" },
+      el("span", {}, fmtDate(date, clang)),
+      el("span", { class: "clm-skip-note" }, L("· கூட்டம் இல்லை (நினைவு/மாநாடு)", "· No meeting (memorial/convention)")),
+      el("div", { class: "grow" }),
+      canEdit ? el("button", { class: "btn btn-icon btn-ghost btn-sm", type: "button",
+        title: L("மீட்டமை", "Restore"), "aria-label": L("மீட்டமை", "Restore"),
+        onClick: () => removeSkip(date) }, icon("plus", 15)) : null);
+  }
+
+  // clmSkip is stored on meta.sheet (same per-congregation store as clmNotes /
+  // clmIcons); store.set re-emits so the view re-renders without an explicit call.
+  function clmSkipDates() { return ((store.get("meta") || {}).sheet || {}).clmSkip || []; }
+  function writeSheet(patch) {
+    const meta = { ...(store.get("meta") || {}) };
+    meta.sheet = { ...(meta.sheet || {}), ...patch };
+    store.set("meta", meta);
+  }
+  function addSkip(date) {
+    const cur = clmSkipDates();
+    if (!cur.includes(date)) writeSheet({ clmSkip: [...cur, date].sort() });
+    toast(L("கூட்டம் இல்லை என குறிக்கப்பட்டது", "Marked: no meeting"), "ok");
+  }
+  function removeSkip(date) {
+    writeSheet({ clmSkip: clmSkipDates().filter((d) => d !== date) });
+    toast(t("saved"), "ok");
   }
 
   function labelLine(label, valueNode) {
@@ -482,6 +536,49 @@ export function renderClm() {
     return { treasures, ministry, living };
   }
 
+  /* ---------- notes (குறிப்பு) — Issue 4 ---------- */
+  // The notes that will print on the exported sheet (0–3 lines). clmPrefs() reads
+  // the same meta.sheet.clmNotes and feeds it to buildClmHtml, so what's edited
+  // here is exactly what prints.
+  function clmNotesList() { return (((store.get("meta") || {}).sheet || {}).clmNotes || []).slice(0, 3); }
+
+  // Read-only preview shown on the page (everyone sees what will print).
+  function notesStrip() {
+    const notes = clmNotesList();
+    if (!notes.length) return null;
+    return el("div", { class: "clm-notes-view" },
+      el("span", { class: "clm-notes-lbl" }, L("குறிப்பு", "Notes") + ":"),
+      ...notes.map((n, i) => el("span", { class: "clm-note-item" }, `${i + 1}. ${n}`)));
+  }
+
+  // Compact editor (up to 3 lines) → writes meta.sheet.clmNotes. canEdit-gated
+  // (the button is only rendered for editors).
+  function openNotes() {
+    const rows = el("div", { style: { display: "flex", flexDirection: "column", gap: "8px" } });
+    const draft = () => [...rows.querySelectorAll("input")].map((i) => i.value.trim()).filter(Boolean).slice(0, 3);
+    const addBtn = el("button", { class: "btn btn-sm", type: "button", onClick: () => addRow() }, icon("plus", 14), L("வரி சேர்", "Add line"));
+    const syncAdd = () => { addBtn.disabled = rows.children.length >= 3; };
+    const addRow = (val = "") => {
+      if (rows.children.length >= 3) return;
+      const inp = el("input", { class: "input", value: val, maxLength: 200, placeholder: L("குறிப்பு வரி", "Note line") });
+      const row = el("div", { class: "row", style: { gap: "8px" } }, inp,
+        el("button", { class: "btn btn-icon btn-ghost btn-sm", type: "button", title: t("delete"),
+          onClick: () => { row.remove(); syncAdd(); } }, icon("x", 15)));
+      rows.append(row); syncAdd(); inp.focus();
+    };
+    clmNotesList().forEach((n) => addRow(n));
+    syncAdd();
+    const body = el("div", { style: { display: "flex", flexDirection: "column", gap: "14px" } },
+      el("p", { class: "hint", style: { fontSize: "var(--fs-md)" } },
+        L("ஏற்றுமதி செய்யப்படும் அட்டவணையின் கீழே 3 குறிப்பு வரிகள் வரை அச்சிடப்படும்.",
+          "Up to 3 note lines print at the bottom of the exported sheet.")),
+      rows, el("div", { class: "row" }, addBtn));
+    modal({ title: L("குறிப்பு", "Notes"), body, actions: [
+      { label: L("ரத்து", "Cancel"), onClick: (c) => c() },
+      { label: L("சேமி", "Save"), class: "btn-primary", onClick: (c) => { writeSheet({ clmNotes: draft() }); toast(t("saved"), "ok"); c(); } },
+    ] });
+  }
+
   /* ---------- assignment helper drawer ---------- */
   function openHelper() {
     // Helper drawer is app chrome → names follow the UI language.
@@ -615,8 +712,13 @@ export function renderClm() {
   // are counted and reported.
   async function autoFillMonth() {
     if (autofillRunning) return toast(L("ஏற்கனவே இயங்குகிறது", "Already running"), "danger");
-    const existing = store.get("clm").map((w) => w.date);
-    const dates = pendingWeekDates(existing, kindMeetingDays("clm").flatMap((wd) => monthDates(wd)));
+    const existing = store.get("clm").map((w) => w.date).filter(Boolean);
+    const skip = clmSkipDates();
+    // Never create a week for a skipped (no-meeting) date, nor a second week in a
+    // calendar week that already has one (same Wed→Thu default-shift guard as the
+    // ghost list — Issues 2 & 3).
+    const dates = pendingWeekDates(existing, kindMeetingDays("clm").flatMap((wd) => monthDates(wd)))
+      .filter((d) => !skip.includes(d) && !existing.some((e) => sameIsoWeek(e, d)));
     if (!dates.length) return toast(L("சேர்க்க வேண்டிய வாரங்கள் இல்லை", "No missing weeks to add"), "danger");
     autofillRunning = true; S.refresh();   // re-render → auto-fill buttons show disabled
     const tst = toast(L("wol.jw.org இலிருந்து ஏற்றுகிறது…", "Fetching from wol.jw.org…"), "", { persist: true });
@@ -706,6 +808,17 @@ export function renderClm() {
 
 /* ---- helpers ------------------------------------------------------------ */
 const clone = (o) => JSON.parse(JSON.stringify(o));
+
+// Mon–Sun calendar-week key for an ISO date ("YYYY-MM-DD" of that week's Monday).
+// Two dates in the same week share a key. Pure + exported → unit-tested; used to
+// suppress a duplicate ghost when a saved week already exists in the same week
+// (the Wed→Thu midweek-default shift, Issue 2).
+export function isoWeekKey(iso) {
+  const d = new Date(iso + "T00:00:00");
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); // back up to Monday
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+export function sameIsoWeek(a, b) { return !!a && !!b && isoWeekKey(a) === isoWeekKey(b); }
 function conflictIds(w) {
   const ids = [w.chairman]; // prayers intentionally excluded (chairman often prays)
   for (const sec of Object.values(w.sections || {})) for (const p of sec) { ids.push(p.assignee, p.assistant, p.reader); }

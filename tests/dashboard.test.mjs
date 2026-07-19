@@ -34,6 +34,16 @@ test("pendingForMonth: a month with no matching records is 0/expected", () => {
   assert.ok(by.clm.expected > 0);
 });
 
+test("pendingForMonth: a skipped clm date drops from clm expected only (Issue 3)", () => {
+  store.docs.meta = { sheet: { midweekDay: 3, clmSkip: ["2026-07-08"] } };
+  store.docs.clm = [{ date: "2026-07-01" }];
+  store.docs.av = [];
+  const by = Object.fromEntries(pendingForMonth(new Date(2026, 6, 1)).map((p) => [p.kind, p]));
+  assert.deepEqual(by.clm, { kind: "clm", expected: 4, filled: 1 }); // 5 Wednesdays − 1 skipped
+  assert.equal(by.av.expected, 9);                                   // av unchanged (still expects Jul 8)
+  store.docs.meta = { sheet: { midweekDay: 3 } };                    // restore for later tests
+});
+
 test("monthRangeLabel: single month when from/to share a month", () => {
   assert.equal(monthRangeLabel(new Date(2026, 6, 1), new Date(2026, 6, 26), "ta"), "ஜூலை 2026");
   assert.equal(monthRangeLabel(new Date(2026, 6, 1), new Date(2026, 6, 26), "en"), "July 2026");

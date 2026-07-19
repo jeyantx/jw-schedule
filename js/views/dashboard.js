@@ -19,8 +19,14 @@ const dateFieldOf = (kind) => (kind === "cleaning" ? "weekOf" : "date");
 // Pure, DOM-free: how many of each kind's expected meeting dates in `monthDate`
 // already have a saved record. Exported so it stays unit-testable.
 export function pendingForMonth(monthDate) {
+  // Dates the congregation marked "no meeting" (memorial/convention) — stored on
+  // meta.sheet.clmSkip by the midweek view. They aren't expected midweek meetings.
+  const clmSkip = ((store.get("meta") || {}).sheet || {}).clmSkip || [];
   return Object.keys(PENDING_KINDS).map((kind) => {
-    const expected = [...new Set(kindMeetingDays(kind).flatMap((wd) => monthDates(wd, monthDate)))];
+    let expected = [...new Set(kindMeetingDays(kind).flatMap((wd) => monthDates(wd, monthDate)))];
+    // Drop skipped dates from the clm count ONLY — av still expects that date for
+    // its own board, so its expected total is left unchanged.
+    if (kind === "clm") expected = expected.filter((d) => !clmSkip.includes(d));
     const field = dateFieldOf(kind);
     const saved = new Set((store.get(kind) || []).map((r) => r[field]).filter(Boolean));
     return { kind, expected: expected.length, filled: expected.filter((d) => saved.has(d)).length };
